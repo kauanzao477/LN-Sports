@@ -7,7 +7,7 @@ import { db, isFirebaseConfigured } from './firebase';
 
 const DEFAULT_SETTINGS = {
   storeName: import.meta.env.VITE_STORE_NAME || 'LN SPORTS',
-  whatsappNumber: import.meta.env.VITE_STORE_WHATSAPP_NUMBER || '5511999999999',
+  whatsappNumber: import.meta.env.VITE_STORE_WHATSAPP_NUMBER || '55499988046866',
   whatsappEnabled: true,
   defaultMessage: 'Olá! Gostaria de falar com um atendente da LN SPORTS.',
   productMessageTemplate: 'Olá! Tenho interesse neste produto:\nProduto: {productName}\nLink: {productUrl}\nGostaria de saber mais informações com um atendente.',
