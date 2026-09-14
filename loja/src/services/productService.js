@@ -233,7 +233,7 @@ export async function fetchLatestLocalProducts() {
     lastFetchTimestamp = now;
     try {
       // Carrega diretamente o arquivo completo de produtos (src/data/produtos.json)
-      const res = await fetch('/src/data/produtos.json?t=' + now);
+      const res = await fetch(`${import.meta.env.BASE_URL}data/produtos.json?t=${now}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
