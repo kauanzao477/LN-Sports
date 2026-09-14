@@ -10,8 +10,8 @@ export function getProxiedImageUrl(src) {
   const trimmed = src.trim();
   if (!trimmed) return null;
 
-  // In development use proxy, in production use direct URL
-  if (!import.meta.env.PROD && trimmed.includes('photo.yupoo.com')) {
+  // Always proxy Yupoo images (both dev and prod)
+  if (trimmed.includes('photo.yupoo.com')) {
     return `/api/image-proxy?url=${encodeURIComponent(trimmed)}`;
   }
 
