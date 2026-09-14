@@ -81,7 +81,28 @@ function yupooImageProxyPlugin() {
 export default defineConfig({
   plugins: [react(), yupooImageProxyPlugin()],
   server: {
-    port: 3000,
-    open: false
+    port: 5173,
+    open: false,
+    proxy: {
+      // Redireciona chamadas /api/* (exceto /api/image-proxy que o plugin já trata)
+      // para o Express server durante desenvolvimento
+      '/api/products': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path,
+      },
+      '/api/categories': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/api/settings': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/api/admin': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    }
   }
 });

@@ -25,9 +25,11 @@ export function SearchPage() {
         const results = await productService.getProducts({
           status: 'published',
           searchQuery: query,
-          limitCount: 50
+          limitCount: 50,
+          page: 1,
         });
-        setProducts(results);
+        // getProducts retorna { data, total, page, totalPages }
+        setProducts(Array.isArray(results) ? results : (results?.data || []));
       } catch (e) {
         console.error("Erro na busca de produtos:", e);
       } finally {

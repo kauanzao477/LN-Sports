@@ -1,13 +1,12 @@
 /**
  * Serviço de Configurações da Loja LN SPORTS.
- * Gerencia o documento settings/store no Firestore (número WhatsApp, mensagens, nome).
+ * Consome /api/settings do server.js (Node/Express + PostgreSQL).
+ * Fallback para localStorage e variáveis de ambiente.
  */
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebase';
 
 const DEFAULT_SETTINGS = {
   storeName: import.meta.env.VITE_STORE_NAME || 'LN SPORTS',
-  whatsappNumber: import.meta.env.VITE_STORE_WHATSAPP_NUMBER || '55499988046866',
+  whatsappNumber: import.meta.env.VITE_STORE_WHATSAPP_NUMBER || '5511999999999',
   whatsappEnabled: true,
   defaultMessage: 'Olá! Gostaria de falar com um atendente da LN SPORTS.',
   productMessageTemplate: 'Olá! Tenho interesse neste produto:\nProduto: {productName}\nLink: {productUrl}\nGostaria de saber mais informações com um atendente.',
@@ -29,42 +28,62 @@ function saveLocalSettings(settings) {
   } catch (e) {}
 }
 
+// Obtém token JWT do admin (se estiver logado)
+function getAuthHeaders() {
+  const token = sessionStorage.getItem('ln_sports_admin_token');
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
 export const settingsService = {
   /**
-   * Obtém as configurações oficiais da loja.
+   * Obtém as configurações da loja.
+   * Fonte primária: GET /api/settings
+   * Fallback: localStorage → defaults de .env
    */
   async getSettings() {
-    if (isFirebaseConfigured && db) {
-      try {
-        const docRef = doc(db, 'settings', 'store');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          return { ...DEFAULT_SETTINGS, ...docSnap.data() };
-        }
-      } catch (error) {
-        console.warn("[settingsService] Fallback para configurações locais:", error.message);
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        // Cache local para acesso offline
+        saveLocalSettings(data);
+        return { ...DEFAULT_SETTINGS, ...data };
       }
+    } catch (err) {
+      console.warn('[settingsService] API indisponível, usando fallback local:', err.message);
     }
     return getLocalSettings();
   },
 
   /**
-   * Salva as configurações oficiais no Firestore.
+   * Salva configurações da loja (admin).
+   * Primário: PUT /api/admin/settings
+   * Fallback: localStorage
    */
   async saveSettings(newSettings) {
-    const merged = { ...DEFAULT_SETTINGS, ...newSettings, updatedAt: new Date().toISOString() };
+    const merged = { ...DEFAULT_SETTINGS, ...newSettings };
 
-    if (isFirebaseConfigured && db) {
-      try {
-        const docRef = doc(db, 'settings', 'store');
-        await setDoc(docRef, merged, { merge: true });
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(merged),
+      });
+      if (res.ok) {
+        saveLocalSettings(merged);
         return merged;
-      } catch (error) {
-        console.error("[settingsService] Erro ao gravar configurações no Firestore:", error);
       }
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    } catch (err) {
+      console.error('[settingsService] Erro ao salvar settings:', err.message);
     }
 
     saveLocalSettings(merged);
     return merged;
-  }
+  },
 };
