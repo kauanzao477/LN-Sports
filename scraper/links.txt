@@ -1,0 +1,32 @@
+# ==============================================================================
+# LINKS DE ENTRADA PARA O SCRAPER LN-SPORTS
+# ==============================================================================
+# Ordem de prioridade: Chuteiras, Tênis e Sapatilhas primeiro; Camisetas em seguida.
+# ==============================================================================
+
+# 1. Catálogo de Chuteiras - 01
+https://lvguccinike.x.yupoo.com/categories
+
+# 2. Catálogo de Chuteiras - 02
+https://ywq2000.x.yupoo.com/categories
+
+# 3. Catálogo de Chuteiras - 03
+https://dachang88.x.yupoo.com/categories
+
+# 4. Catálogo de Chuteiras - Infantil
+https://mzrycm102618.x.yupoo.com/categories/4742786
+
+# 5. Sapatilhas de Atletismo
+https://mzrycm102618.x.yupoo.com/search/album?uid=1&sort=unix&q=Maxfly
+
+# 6. Tênis On Running e HOKA
+https://sdh60889.x.yupoo.com/categories
+
+# 7. Tênis Casuais (Senha: HJH001077)
+https://1998shoe.x.yupoo.com/categories
+
+# 8. Camisetas de Time Retrô
+https://minkang.x.yupoo.com/categories/711624
+
+# 9. Camisetas de Time / Tabela de Conversão
+https://minkang.x.yupoo.com/categories

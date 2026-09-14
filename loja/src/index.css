@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-brand-dark text-slate-100 antialiased selection:bg-brand-purpleLight selection:text-white;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Custom scrollbar com acabamento em Roxo */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #080511;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #33235f;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9333ea;
+  }
+}
+
+/* Painéis de vidro fumê com reflexos roxos */
+.glass-panel {
+  background: rgba(18, 12, 36, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(168, 85, 247, 0.15);
+}
+
+.glass-card {
+  background: rgba(27, 18, 54, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(168, 85, 247, 0.12);
+}
+
+.glass-card:hover {
+  border-color: rgba(192, 132, 252, 0.35);
+  box-shadow: 0 10px 30px -10px rgba(147, 51, 234, 0.25);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-purple {
+  background: linear-gradient(135deg, #c084fc 0%, #a855f7 50%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Função de verificação de Administrador (via custom claim admin == true ou documento em admins/{uid})
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Regras para Produtos
+    match /products/{productId} {
+      // Público só pode ler se o status for 'published'
+      // Administrador pode ler todos (inclusive drafts e inativos)
+      allow read: if resource.data.status == 'published' || isAdmin();
+      // Somente administradores verificados podem criar, atualizar ou excluir produtos
+      allow write: if isAdmin();
+    }
+
+    // Regras para Categorias
+    match /categories/{categoryId} {
+      // Leitura pública de categorias
+      allow read: if true;
+      // Escrita restrita a administradores
+      allow write: if isAdmin();
+    }
+
+    // Regras para Configurações Gerais da Loja (WhatsApp, etc.)
+    match /settings/{settingId} {
+      // Público pode ler configurações públicas da loja (número de WhatsApp, nome da loja)
+      allow read: if true;
+      // Somente administrador pode alterar o número do WhatsApp ou mensagens
+      allow write: if isAdmin();
+    }
+
+    // Coleção de Administradores Registrados
+    match /admins/{adminId} {
+      allow read: if isAdmin();
+      allow write: if false; // Gerenciado via Firebase Console ou Admin SDK
+    }
+  }
+}
