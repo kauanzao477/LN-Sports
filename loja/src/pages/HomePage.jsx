@@ -12,6 +12,9 @@ export function HomePage() {
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [recentProducts, setRecentProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  // loadingFeatured é independente de loading para evitar flicker:
+  // os Destaques mostram skeleton até os 4 produtos corretos estarem prontos.
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
   const { categories, settings } = useStore();
   const [visibleCount, setVisibleCount] = useState(12);
 
@@ -32,34 +35,48 @@ export function HomePage() {
   }, []);
 
   // ── Destaques: exatamente 4 produtos, 1 por categoria oficial diferente ──────
-  // Categorias permitidas (4 oficiais, sem Tênis Esportivos nem Tênis Esportivo)
-  // A seleção é dinâmica: busca o 1º produto disponível em cada categoria.
+  // Lista de candidatas em ordem de preferência (todas oficiais, sem Tênis Esportivos).
+  // Busca paralela; pega as 4 primeiras que retornarem produto.
   useEffect(() => {
     if (!categories || categories.length === 0) return;
 
-    const ALLOWED_CATEGORIES = [
+    // Candidatas ordenadas por preferência — todas categorias oficiais exceto tênis esportivos.
+    // São exatamente as categorias definidas em OFFICIAL_CATEGORIES (sem invenção).
+    const CANDIDATE_CATEGORIES = [
       'Camisetas de Time',
       'Camisetas de Time Retrô',
       'Chuteiras',
+      'Chuteiras Infantil',
       'Tênis Casuais',
+      'Tênis de Corrida',
+      'Tênis On Running e HOKA',
+      'Sapatilhas de Atletismo',
     ];
 
     const fetchDiverseFeatured = async () => {
-      const results = await Promise.allSettled(
-        ALLOWED_CATEGORIES.map(catName =>
-          productService.getProducts({ category: catName, limitCount: 1, page: 1 })
-        )
-      );
+      setLoadingFeatured(true);
+      try {
+        // Busca paralela: 1 produto de cada candidata
+        const results = await Promise.allSettled(
+          CANDIDATE_CATEGORIES.map(catName =>
+            productService.getProducts({ category: catName, limitCount: 1, page: 1 })
+          )
+        );
 
-      const featured = [];
-      for (const r of results) {
-        if (r.status === 'fulfilled') {
-          const items = r.value?.data || [];
-          if (items.length > 0) featured.push(items[0]);
+        // Pega as primeiras 4 que retornaram ao menos 1 produto
+        const featured = [];
+        for (const r of results) {
+          if (featured.length >= 4) break;
+          if (r.status === 'fulfilled') {
+            const items = r.value?.data || [];
+            if (items.length > 0) featured.push(items[0]);
+          }
         }
-      }
 
-      if (featured.length > 0) setFeaturedProducts(featured);
+        if (featured.length > 0) setFeaturedProducts(featured);
+      } finally {
+        setLoadingFeatured(false);
+      }
     };
 
     fetchDiverseFeatured();
@@ -240,8 +257,9 @@ export function HomePage() {
             </div>
 
             <ProductGrid
-              products={featuredProducts.length > 0 ? featuredProducts : recentProducts.slice(0, 4)}
-              loading={loading}
+              products={featuredProducts}
+              loading={loadingFeatured}
+              skeletonCount={4}
               emptyTitle="Nenhum destaque ativo no momento"
               emptyMessage="Os administradores da LN SPORTS estão atualizando os lançamentos."
             />
