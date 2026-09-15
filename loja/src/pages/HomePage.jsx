@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Shirt, Sparkles, MessageCircle, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
 import { Header } from '../components/common/Header';
@@ -34,22 +34,14 @@ export function HomePage() {
     };
   }, []);
 
-  // hasFetchedRef garante que fetchDiverseFeatured rode UMA única vez.
-  // O StoreContext tem um setInterval de 1,5 s que recria o array `categories`
-  // a cada tick; sem essa guarda, o useEffect re-dispararia a cada 1,5 s.
-  const hasFetchedRef = useRef(false);
-
   // ── Destaques: exatamente 4 produtos, 1 por categoria oficial diferente ──────
-  // Lista de candidatas em ordem de preferência (todas oficiais, sem Tênis Esportivos).
-  // Busca paralela; pega as 4 primeiras que retornarem produto.
+  // Roda UMA vez no mount (dependência []).
+  // Não depende de `categories` do StoreContext — tem lista própria de candidatas.
+  // `cancelled` evita atualizações de estado após desmontagem (StrictMode safe).
   useEffect(() => {
-    // Aguarda categories chegarem E garante execução única
-    if (!categories || categories.length === 0) return;
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
+    let cancelled = false;
 
-    // Candidatas ordenadas por preferência — todas categorias oficiais exceto tênis esportivos.
-    // São exatamente as categorias definidas em OFFICIAL_CATEGORIES (sem invenção).
+    // Candidatas ordenadas por preferência — categorias oficiais, sem Tênis Esportivos.
     const CANDIDATE_CATEGORIES = [
       'Camisetas de Time',
       'Camisetas de Time Retrô',
@@ -62,7 +54,6 @@ export function HomePage() {
     ];
 
     const fetchDiverseFeatured = async () => {
-      setLoadingFeatured(true);
       try {
         // Busca paralela: 1 produto de cada candidata
         const results = await Promise.allSettled(
@@ -70,6 +61,8 @@ export function HomePage() {
             productService.getProducts({ category: catName, limitCount: 1, page: 1 })
           )
         );
+
+        if (cancelled) return;
 
         // Pega as primeiras 4 que retornaram ao menos 1 produto
         const featured = [];
@@ -83,12 +76,14 @@ export function HomePage() {
 
         if (featured.length > 0) setFeaturedProducts(featured);
       } finally {
-        setLoadingFeatured(false);
+        if (!cancelled) setLoadingFeatured(false);
       }
     };
 
     fetchDiverseFeatured();
-  }, [categories]);
+
+    return () => { cancelled = true; };
+  }, []); // [] = uma única execução no mount, independente do polling do StoreContext
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-dark">
