@@ -12,6 +12,7 @@ export function HomePage() {
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [recentProducts, setRecentProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
   const { categories, settings } = useStore();
   const [visibleCount, setVisibleCount] = useState(12);
 
@@ -31,40 +32,88 @@ export function HomePage() {
     };
   }, []);
 
-  // ── Destaques: 1 produto por categoria (busca paralela por categoria) ────
-  // Essa abordagem garante diversidade real: cada slot vem de uma categoria
-  // diferente, independente da ordem dos produtos no banco.
+  // ── Destaques: 1 produto por categoria ──────────────────────────────────
+  // Busca todos os produtos disponíveis, agrupa por categoria no cliente e
+  // seleciona 1 produto por categoria até MAX_FEATURED slots.
+  // Não depende de productCount nem da ordem do array — garante diversidade real.
   useEffect(() => {
-    if (!categories || categories.length === 0) return;
-
     const MAX_FEATURED = 8;
 
     const fetchDiverseFeatured = async () => {
-      // Usa apenas categorias que realmente possuem produtos no banco
-      const catsWithProducts = categories.filter(c => (c.productCount || 0) > 0);
-      if (catsWithProducts.length === 0) return;
+      setLoadingFeatured(true);
+      let allItems = [];
+      try {
+        // Tenta buscar um lote amplo de produtos para cobrir todas as categorias
+        const result = await productService.getProducts({
+          status: 'all',
+          limitCount: 200,
+          page: 1,
+        });
+        allItems = result?.data || [];
+      } catch {
+        setLoadingFeatured(false);
+        return;
+      }
 
-      // Limita ao número máximo de destaques e busca 1 produto por categoria em paralelo
-      const targets = catsWithProducts.slice(0, MAX_FEATURED);
-      const results = await Promise.allSettled(
-        targets.map(cat =>
-          productService.getProducts({ category: cat.name, limitCount: 1, page: 1 })
-        )
-      );
+      if (allItems.length === 0) { setLoadingFeatured(false); return; }
+
+      // Agrupa produtos por categoria (usa a categoria real de cada produto)
+      const byCategory = new Map();
+      for (const product of allItems) {
+        const cat = product.category?.trim();
+        if (!cat) continue;
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat).push(product);
+      }
+
+      if (byCategory.size === 0) { setLoadingFeatured(false); return; }
+
+      // Percorre as categorias em round-robin, escolhendo 1 produto de cada
+      // até completar MAX_FEATURED slots — nunca repete categoria enquanto
+      // houver categorias com produtos não selecionados.
+      const categoryNames = Array.from(byCategory.keys());
+      // Embaralha as categorias para não depender da ordem do banco
+      for (let i = categoryNames.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [categoryNames[i], categoryNames[j]] = [categoryNames[j], categoryNames[i]];
+      }
 
       const featured = [];
-      for (const r of results) {
-        if (r.status === 'fulfilled') {
-          const items = r.value?.data || [];
-          if (items.length > 0) featured.push(items[0]);
+      const usedCategories = new Set();
+
+      // 1ª passagem: 1 produto por categoria distinta
+      for (const cat of categoryNames) {
+        if (featured.length >= MAX_FEATURED) break;
+        const pool = byCategory.get(cat);
+        if (!pool || pool.length === 0) continue;
+        // Escolhe 1 produto aleatório da categoria
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        featured.push(pick);
+        usedCategories.add(cat);
+      }
+
+      // 2ª passagem: se ainda não atingiu MAX_FEATURED, repete categorias
+      if (featured.length < MAX_FEATURED) {
+        for (const cat of categoryNames) {
+          if (featured.length >= MAX_FEATURED) break;
+          const pool = byCategory.get(cat);
+          if (!pool || pool.length === 0) continue;
+          // Pega produto diferente do já escolhido, se possível
+          const alreadyPicked = featured.find(p => p.category?.trim() === cat);
+          const remaining = pool.filter(p => p !== alreadyPicked);
+          const pick = remaining.length > 0
+            ? remaining[Math.floor(Math.random() * remaining.length)]
+            : pool[Math.floor(Math.random() * pool.length)];
+          featured.push(pick);
         }
       }
 
       if (featured.length > 0) setFeaturedProducts(featured);
+      setLoadingFeatured(false);
     };
 
-    fetchDiverseFeatured();
-  }, [categories]);
+    fetchDiverseFeatured().catch(() => setLoadingFeatured(false));
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-dark">
@@ -241,8 +290,8 @@ export function HomePage() {
             </div>
 
             <ProductGrid
-              products={featuredProducts.length > 0 ? featuredProducts : recentProducts.slice(0, 4)}
-              loading={loading}
+              products={featuredProducts}
+              loading={loadingFeatured}
               emptyTitle="Nenhum destaque ativo no momento"
               emptyMessage="Os administradores da LN SPORTS estão atualizando os lançamentos."
             />
