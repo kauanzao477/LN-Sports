@@ -24,8 +24,36 @@ export function HomePage() {
       limitCount: 16,
       callback: (items) => {
         setRecentProducts(items);
-        const feat = items.filter(p => p.featured || p.status === 'published');
-        setFeaturedProducts(feat.length > 0 ? feat.slice(0, 8) : items.slice(0, 4));
+
+        // Distribui destaques: 1 produto por categoria, priorizando variedade
+        const selectDiverseFeatured = (products, maxCount = 8) => {
+          const seenCategories = new Set();
+          const selected = [];
+
+          // Primeira passagem: um produto por categoria
+          for (const p of products) {
+            if (selected.length >= maxCount) break;
+            const cat = (p.category || '').trim();
+            if (cat && !seenCategories.has(cat)) {
+              seenCategories.add(cat);
+              selected.push(p);
+            }
+          }
+
+          // Segunda passagem: completa com produtos de categorias já vistas, se necessário
+          if (selected.length < maxCount) {
+            for (const p of products) {
+              if (selected.length >= maxCount) break;
+              if (!selected.includes(p)) selected.push(p);
+            }
+          }
+
+          return selected;
+        };
+
+        const published = items.filter(p => p.featured || p.status === 'published');
+        const diverse = selectDiverseFeatured(published.length > 0 ? published : items);
+        setFeaturedProducts(diverse.length > 0 ? diverse : items.slice(0, 4));
         setLoading(false);
       }
     });

@@ -75,14 +75,14 @@ export const OFFICIAL_CATEGORIES = [
   },
   {
     id: 'tenis-casuais-senha-hjh001077',
-    name: 'Tênis Casuais - Senha: HJH001077',
+    name: 'Tênis Casuais',
     slug: 'tenis-casuais-senha-hjh001077',
     subcategories: ['Casuais Premium', 'Sneakers Urbanos'],
     productCount: 0
   },
   {
     id: 'tenis-esportivos-senha-888888',
-    name: 'Tênis Esportivos - Senha: 888888',
+    name: 'Tênis Esportivos',
     slug: 'tenis-esportivos-senha-888888',
     subcategories: ['Treino & Gym', 'Running Performance'],
     productCount: 0

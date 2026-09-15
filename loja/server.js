@@ -325,8 +325,8 @@ app.get('/api/categories', async (req, res) => {
     { id: 'tenis-de-corrida',           name: 'Tênis de Corrida',                    slug: 'tenis-de-corrida' },
     { id: 'tenis-esportivo',            name: 'Tênis Esportivo',                     slug: 'tenis-esportivo' },
     { id: 'tenis-on-running-e-hoka',    name: 'Tênis On Running e HOKA',             slug: 'tenis-on-running-e-hoka' },
-    { id: 'tenis-casuais-senha-hjh001077',  name: 'Tênis Casuais - Senha: HJH001077',   slug: 'tenis-casuais-senha-hjh001077' },
-    { id: 'tenis-esportivos-senha-888888',  name: 'Tênis Esportivos - Senha: 888888',   slug: 'tenis-esportivos-senha-888888' },
+    { id: 'tenis-casuais-senha-hjh001077',  name: 'Tênis Casuais',                      slug: 'tenis-casuais-senha-hjh001077' },
+    { id: 'tenis-esportivos-senha-888888',  name: 'Tênis Esportivos',                    slug: 'tenis-esportivos-senha-888888' },
   ];
 
   if (!db) {
