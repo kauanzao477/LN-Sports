@@ -15,53 +15,56 @@ export function HomePage() {
   const { categories, settings } = useStore();
   const [visibleCount, setVisibleCount] = useState(12);
 
+  // ── Catálogo recente (polling em tempo real) ─────────────────────────────
   useEffect(() => {
     setLoading(true);
-
-    // Assinatura em tempo real para produtos publicados
     const unsubscribeRecent = productService.subscribeProducts({
-      status: 'all', // Permite que novidades sendo catalogadas apareçam em tempo real
+      status: 'all',
       limitCount: 16,
       callback: (items) => {
         setRecentProducts(items);
-
-        // Distribui destaques: 1 produto por categoria, priorizando variedade
-        const selectDiverseFeatured = (products, maxCount = 8) => {
-          const seenCategories = new Set();
-          const selected = [];
-
-          // Primeira passagem: um produto por categoria
-          for (const p of products) {
-            if (selected.length >= maxCount) break;
-            const cat = (p.category || '').trim();
-            if (cat && !seenCategories.has(cat)) {
-              seenCategories.add(cat);
-              selected.push(p);
-            }
-          }
-
-          // Segunda passagem: completa com produtos de categorias já vistas, se necessário
-          if (selected.length < maxCount) {
-            for (const p of products) {
-              if (selected.length >= maxCount) break;
-              if (!selected.includes(p)) selected.push(p);
-            }
-          }
-
-          return selected;
-        };
-
-        const published = items.filter(p => p.featured || p.status === 'published');
-        const diverse = selectDiverseFeatured(published.length > 0 ? published : items);
-        setFeaturedProducts(diverse.length > 0 ? diverse : items.slice(0, 4));
         setLoading(false);
       }
     });
-
     return () => {
       if (typeof unsubscribeRecent === 'function') unsubscribeRecent();
     };
   }, []);
+
+  // ── Destaques: 1 produto por categoria (busca paralela por categoria) ────
+  // Essa abordagem garante diversidade real: cada slot vem de uma categoria
+  // diferente, independente da ordem dos produtos no banco.
+  useEffect(() => {
+    if (!categories || categories.length === 0) return;
+
+    const MAX_FEATURED = 8;
+
+    const fetchDiverseFeatured = async () => {
+      // Usa apenas categorias que realmente possuem produtos no banco
+      const catsWithProducts = categories.filter(c => (c.productCount || 0) > 0);
+      if (catsWithProducts.length === 0) return;
+
+      // Limita ao número máximo de destaques e busca 1 produto por categoria em paralelo
+      const targets = catsWithProducts.slice(0, MAX_FEATURED);
+      const results = await Promise.allSettled(
+        targets.map(cat =>
+          productService.getProducts({ category: cat.name, limitCount: 1, page: 1 })
+        )
+      );
+
+      const featured = [];
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const items = r.value?.data || [];
+          if (items.length > 0) featured.push(items[0]);
+        }
+      }
+
+      if (featured.length > 0) setFeaturedProducts(featured);
+    };
+
+    fetchDiverseFeatured();
+  }, [categories]);
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-dark">
