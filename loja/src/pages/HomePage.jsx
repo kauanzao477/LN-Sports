@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Shirt, Sparkles, MessageCircle, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
 import { Header } from '../components/common/Header';
@@ -15,8 +15,6 @@ export function HomePage() {
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const { categories, settings } = useStore();
   const [visibleCount, setVisibleCount] = useState(12);
-  // Guard: executa a busca de destaques apenas uma vez
-  const featuredFetched = useRef(false);
 
   // ── Catálogo recente (polling em tempo real) ─────────────────────────────
   useEffect(() => {
@@ -34,55 +32,32 @@ export function HomePage() {
     };
   }, []);
 
-  // ── Destaques: 1 produto por categoria oficial ───────────────────────────
-  // Usa as categorias oficiais do contexto (vindas da API /api/categories com
-  // productCount real). Para cada categoria que tenha produtos, busca 1 produto
-  // pelo nome exato da categoria. Nunca inventa ou deriva categorias.
+  // ── Destaques: exatamente 4 produtos, 1 por categoria oficial diferente ──────
+  // Slugs fixos escolhidos manualmente — 1 produto real de cada categoria.
+  // Categorias: Camisetas de Time | Camisetas de Time Retrô | Chuteiras | Tênis Casuais
+  // Nenhuma é "Tênis Esportivos". Nenhuma categoria inventada.
   useEffect(() => {
-    // Aguarda o contexto carregar as categorias
-    if (!categories || categories.length === 0) return;
-    // Executa somente uma vez
-    if (featuredFetched.current) return;
-
-    const MAX_FEATURED = 8;
-
-    // Filtra somente categorias oficiais que realmente têm produtos
-    const catsComProdutos = categories.filter(c => (c.productCount || 0) > 0);
-    if (catsComProdutos.length === 0) return; // ainda aguardando dados reais
+    const FEATURED_SLUGS = [
+      '2526-kids-chelsea-home-size-16-28',       // Camisetas de Time
+      'retro-1988-holland-home-retro',            // Camisetas de Time Retrô
+      'adidas-27-predator-elite-tongue-fg36-45',  // Chuteiras
+      'c10-p10-24',                               // Tênis Casuais
+    ];
 
     const fetchFeatured = async () => {
-      featuredFetched.current = true;
       setLoadingFeatured(true);
-
-      // Busca 1 produto de cada categoria oficial em paralelo
-      const targets = catsComProdutos.slice(0, MAX_FEATURED);
       const results = await Promise.allSettled(
-        targets.map(cat =>
-          productService.getProducts({
-            category: cat.name,   // nome exato da categoria oficial
-            limitCount: 3,        // pega 3 para ter de onde escolher
-            page: 1,
-          })
-        )
+        FEATURED_SLUGS.map(slug => productService.getProductBySlug(slug))
       );
-
-      const featured = [];
-      for (let i = 0; i < results.length; i++) {
-        const r = results[i];
-        if (r.status !== 'fulfilled') continue;
-        const items = r.value?.data || [];
-        if (items.length === 0) continue;
-        // Escolhe um produto aleatório dos retornados (não depende da ordem do banco)
-        const pick = items[Math.floor(Math.random() * items.length)];
-        featured.push(pick);
-      }
-
-      if (featured.length > 0) setFeaturedProducts(featured);
+      const featured = results
+        .filter(r => r.status === 'fulfilled' && r.value)
+        .map(r => r.value);
+      setFeaturedProducts(featured);
       setLoadingFeatured(false);
     };
 
     fetchFeatured().catch(() => setLoadingFeatured(false));
-  }, [categories]);
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-dark">
