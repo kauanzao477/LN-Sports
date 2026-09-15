@@ -1,96 +1,113 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { X, ChevronRight, MessageCircle, ShieldCheck } from 'lucide-react';
+import { X, ChevronRight, ShieldCheck } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { WhatsAppButton } from './WhatsAppButton';
 
 export function MobileDrawer({ isOpen, onClose }) {
   const { categories, settings } = useStore();
 
+  // Fechar com ESC
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    // Travar scroll do body quando aberto
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
-      {/* Backdrop escuro com desfoque */}
+      {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/75 backdrop-blur-sm"
         onClick={onClose}
+        aria-hidden="true"
       />
 
-      {/* Drawer deslizante preto e roxo */}
-      <div className="fixed inset-y-0 left-0 w-[85%] max-w-sm bg-brand-surface border-r border-brand-border flex flex-col shadow-2xl z-10 animate-in slide-in-from-left duration-300">
+      {/* Drawer deslizante */}
+      <div
+        className="fixed inset-y-0 left-0 w-[80%] max-w-[320px] bg-brand-surface border-r border-brand-border flex flex-col shadow-2xl z-10"
+        style={{ animation: 'slideInFromLeft 0.25s ease-out' }}
+      >
         {/* Topo do Drawer */}
-        <div className="p-4 border-b border-brand-border flex items-center justify-between">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-brand-border">
           <Link to="/" onClick={onClose} className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-purple to-brand-purpleNeon flex items-center justify-center font-display font-black text-white text-lg">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-brand-purple to-brand-purpleNeon flex items-center justify-center font-display font-black text-white text-sm">
               LN
             </div>
-            <span className="font-display font-black text-xl tracking-wider text-white">
+            <span className="font-display font-black text-lg tracking-tight text-white">
               LN <span className="text-brand-purpleLight">SPORTS</span>
             </span>
           </Link>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-brand-muted hover:text-white hover:bg-brand-card transition-colors"
+            className="p-1.5 rounded-lg text-brand-muted hover:text-white hover:bg-brand-card transition-colors"
+            aria-label="Fechar menu"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Links de navegação */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-brand-purpleLight mb-3">
-              Categorias em Destaque
-            </h4>
-            <div className="space-y-1">
-              <Link
-                to="/"
-                onClick={onClose}
-                className="flex items-center justify-between p-3 rounded-xl text-white font-medium hover:bg-brand-card hover:text-brand-purpleLight transition-colors"
-              >
-                <span>Início / Destaques</span>
-                <ChevronRight className="w-4 h-4 text-brand-muted" />
-              </Link>
-              {categories.map((cat) => (
-                <Link
-                  key={cat.id || cat.slug}
-                  to={`/categoria/${cat.slug}`}
-                  onClick={onClose}
-                  className="flex items-center justify-between p-3 rounded-xl text-slate-200 font-medium hover:bg-brand-card hover:text-brand-purpleLight transition-colors"
-                >
-                  <span>{cat.name}</span>
-                  <ChevronRight className="w-4 h-4 text-brand-muted" />
-                </Link>
-              ))}
-            </div>
-          </div>
+        <div className="flex-1 overflow-y-auto py-2">
+          
+          {/* Início */}
+          <Link
+            to="/"
+            onClick={onClose}
+            className="flex items-center justify-between px-4 py-3 text-white font-medium hover:bg-brand-card hover:text-brand-purpleLight transition-colors text-sm"
+          >
+            <span>🏠 Início / Destaques</span>
+            <ChevronRight className="w-4 h-4 text-brand-muted shrink-0" />
+          </Link>
 
-          <div className="pt-4 border-t border-brand-border">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-brand-muted mb-3">
-              Atendimento Humanizado
-            </h4>
-            <WhatsAppButton
-              text="Falar no WhatsApp"
-              className="w-full justify-center py-3"
-            />
-            <p className="text-[11px] text-brand-muted mt-2 text-center">
-              Tire dúvidas sobre tamanhos, fotos e modelos diretamente com um atendente.
+          {/* Divider com label */}
+          <div className="px-4 py-2 mt-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-brand-purpleLight">
+              Categorias
             </p>
           </div>
+
+          {/* Lista de categorias */}
+          {categories.map((cat) => (
+            <Link
+              key={cat.id || cat.slug}
+              to={`/categoria/${cat.slug}`}
+              onClick={onClose}
+              className="flex items-center justify-between px-4 py-3 text-slate-200 hover:bg-brand-card hover:text-brand-purpleLight transition-colors text-sm"
+            >
+              <span>{cat.name}</span>
+              <ChevronRight className="w-4 h-4 text-brand-muted shrink-0" />
+            </Link>
+          ))}
         </div>
 
-        {/* Rodapé do menu mobile */}
-        <div className="p-4 border-t border-brand-border bg-brand-dark/60 flex items-center justify-between text-xs text-brand-muted">
-          <span>LN SPORTS &copy; 2026</span>
-          <Link
-            to="/admin"
-            onClick={onClose}
-            className="flex items-center gap-1 hover:text-brand-purpleLight transition-colors"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Admin</span>
-          </Link>
+        {/* Rodapé do Drawer */}
+        <div className="border-t border-brand-border p-4 space-y-3 bg-brand-dark/60">
+          <WhatsAppButton
+            text="Falar no WhatsApp"
+            className="w-full justify-center py-3"
+          />
+          <div className="flex items-center justify-between text-xs text-brand-muted pt-1">
+            <span>LN SPORTS © 2026</span>
+            <Link
+              to="/admin"
+              onClick={onClose}
+              className="flex items-center gap-1 hover:text-brand-purpleLight transition-colors"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Admin</span>
+            </Link>
+          </div>
         </div>
       </div>
     </div>

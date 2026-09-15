@@ -10,13 +10,13 @@ export function Footer() {
   return (
     <footer className="bg-brand-surface border-t border-brand-border mt-20 text-slate-400">
       {/* Banner de Atendimento WhatsApp */}
-      <div className="border-b border-brand-border bg-gradient-to-r from-brand-surface via-brand-card to-brand-surface py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
+      <div className="border-b border-brand-border bg-gradient-to-r from-brand-surface via-brand-card to-brand-surface py-6 lg:py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
           <div>
-            <h3 className="text-2xl font-display font-extrabold text-white mb-2">
+            <h3 className="text-lg lg:text-2xl font-display font-extrabold text-white mb-1">
               Dúvidas sobre tamanhos ou disponibilidade?
             </h3>
-            <p className="text-slate-300 max-w-xl text-sm">
+            <p className="text-slate-300 max-w-xl text-xs sm:text-sm">
               Nosso catálogo é digital e as compras são finalizadas diretamente com um atendente exclusivo no WhatsApp.
             </p>
           </div>
@@ -29,7 +29,7 @@ export function Footer() {
       </div>
 
       {/* Links Institucionais e Categorias */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           
           {/* Coluna 1: Sobre */}

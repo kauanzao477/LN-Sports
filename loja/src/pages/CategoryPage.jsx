@@ -130,9 +130,9 @@ useEffect(() => {
     <div className="min-h-screen flex flex-col bg-brand-dark">
       <Header />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 lg:py-8">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-xs text-brand-muted mb-6">
+        <nav className="flex items-center gap-2 text-xs text-brand-muted mb-3 lg:mb-6">
           <Link to="/" className="hover:text-white transition-colors">Início</Link>
           <ChevronRight className="w-3.5 h-3.5" />
           <span className="text-white font-medium">{category?.name || 'Categoria'}</span>
@@ -145,14 +145,14 @@ useEffect(() => {
         </nav>
 
         {/* Título e Controles */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-brand-border/60 mb-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-2 pb-4 border-b border-brand-border/60 mb-4 lg:pb-6 lg:mb-8">
           {category?.slug !== 'tabela-de-conversao-br-x-eur' && (
             <div>
-              <h1 className="font-display font-black text-3xl sm:text-4xl text-white">
+              <h1 className="font-display font-black text-2xl sm:text-4xl text-white">
                 {category?.name || 'Catálogo'}
               </h1>
-              <p className="text-sm text-brand-muted mt-1">
-                {products.length} {products.length === 1 ? 'produto publicado' : 'produtos publicados'} nesta categoria
+              <p className="text-xs sm:text-sm text-brand-muted mt-0.5">
+                {products.length} {products.length === 1 ? 'produto publicado' : 'produtos publicados'}
               </p>
             </div>
           )}
@@ -175,10 +175,10 @@ useEffect(() => {
 
         {/* Subcategory filter – shown for categories except Camisetas de Time and Camisetas de Time Retrô */}
         {!(category?.slug === 'camisetas-de-time' || category?.slug === 'camisetas-de-time-retro') && category?.subcategories && category.subcategories.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 scrollbar-thin">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-3 lg:pb-4 lg:mb-6 scrollbar-none">
             <button
               onClick={() => setSelectedSubcategory(null)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${
+              className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-all ${
                 selectedSubcategory === null
                   ? 'bg-brand-purple text-white shadow-purple-glow'
                   : 'bg-brand-surface text-slate-300 hover:text-white hover:bg-brand-card border border-brand-border'
@@ -190,7 +190,7 @@ useEffect(() => {
               <button
                 key={sub}
                 onClick={() => setSelectedSubcategory(sub === selectedSubcategory ? null : sub)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${
+                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-all ${
                   selectedSubcategory === sub
                     ? 'bg-brand-purple text-white shadow-purple-glow'
                     : 'bg-brand-surface text-slate-300 hover:text-white hover:bg-brand-card border border-brand-border'
