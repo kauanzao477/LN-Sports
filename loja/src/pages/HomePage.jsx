@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Shirt, Sparkles, MessageCircle, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
 import { Header } from '../components/common/Header';
@@ -15,6 +15,8 @@ export function HomePage() {
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const { categories, settings } = useStore();
   const [visibleCount, setVisibleCount] = useState(12);
+  // Guard: executa a busca de destaques apenas uma vez
+  const featuredFetched = useRef(false);
 
   // ── Catálogo recente (polling em tempo real) ─────────────────────────────
   useEffect(() => {
@@ -32,88 +34,55 @@ export function HomePage() {
     };
   }, []);
 
-  // ── Destaques: 1 produto por categoria ──────────────────────────────────
-  // Busca todos os produtos disponíveis, agrupa por categoria no cliente e
-  // seleciona 1 produto por categoria até MAX_FEATURED slots.
-  // Não depende de productCount nem da ordem do array — garante diversidade real.
+  // ── Destaques: 1 produto por categoria oficial ───────────────────────────
+  // Usa as categorias oficiais do contexto (vindas da API /api/categories com
+  // productCount real). Para cada categoria que tenha produtos, busca 1 produto
+  // pelo nome exato da categoria. Nunca inventa ou deriva categorias.
   useEffect(() => {
+    // Aguarda o contexto carregar as categorias
+    if (!categories || categories.length === 0) return;
+    // Executa somente uma vez
+    if (featuredFetched.current) return;
+
     const MAX_FEATURED = 8;
 
-    const fetchDiverseFeatured = async () => {
+    // Filtra somente categorias oficiais que realmente têm produtos
+    const catsComProdutos = categories.filter(c => (c.productCount || 0) > 0);
+    if (catsComProdutos.length === 0) return; // ainda aguardando dados reais
+
+    const fetchFeatured = async () => {
+      featuredFetched.current = true;
       setLoadingFeatured(true);
-      let allItems = [];
-      try {
-        // Tenta buscar um lote amplo de produtos para cobrir todas as categorias
-        const result = await productService.getProducts({
-          status: 'all',
-          limitCount: 200,
-          page: 1,
-        });
-        allItems = result?.data || [];
-      } catch {
-        setLoadingFeatured(false);
-        return;
-      }
 
-      if (allItems.length === 0) { setLoadingFeatured(false); return; }
-
-      // Agrupa produtos por categoria (usa a categoria real de cada produto)
-      const byCategory = new Map();
-      for (const product of allItems) {
-        const cat = product.category?.trim();
-        if (!cat) continue;
-        if (!byCategory.has(cat)) byCategory.set(cat, []);
-        byCategory.get(cat).push(product);
-      }
-
-      if (byCategory.size === 0) { setLoadingFeatured(false); return; }
-
-      // Percorre as categorias em round-robin, escolhendo 1 produto de cada
-      // até completar MAX_FEATURED slots — nunca repete categoria enquanto
-      // houver categorias com produtos não selecionados.
-      const categoryNames = Array.from(byCategory.keys());
-      // Embaralha as categorias para não depender da ordem do banco
-      for (let i = categoryNames.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [categoryNames[i], categoryNames[j]] = [categoryNames[j], categoryNames[i]];
-      }
+      // Busca 1 produto de cada categoria oficial em paralelo
+      const targets = catsComProdutos.slice(0, MAX_FEATURED);
+      const results = await Promise.allSettled(
+        targets.map(cat =>
+          productService.getProducts({
+            category: cat.name,   // nome exato da categoria oficial
+            limitCount: 3,        // pega 3 para ter de onde escolher
+            page: 1,
+          })
+        )
+      );
 
       const featured = [];
-      const usedCategories = new Set();
-
-      // 1ª passagem: 1 produto por categoria distinta
-      for (const cat of categoryNames) {
-        if (featured.length >= MAX_FEATURED) break;
-        const pool = byCategory.get(cat);
-        if (!pool || pool.length === 0) continue;
-        // Escolhe 1 produto aleatório da categoria
-        const pick = pool[Math.floor(Math.random() * pool.length)];
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status !== 'fulfilled') continue;
+        const items = r.value?.data || [];
+        if (items.length === 0) continue;
+        // Escolhe um produto aleatório dos retornados (não depende da ordem do banco)
+        const pick = items[Math.floor(Math.random() * items.length)];
         featured.push(pick);
-        usedCategories.add(cat);
-      }
-
-      // 2ª passagem: se ainda não atingiu MAX_FEATURED, repete categorias
-      if (featured.length < MAX_FEATURED) {
-        for (const cat of categoryNames) {
-          if (featured.length >= MAX_FEATURED) break;
-          const pool = byCategory.get(cat);
-          if (!pool || pool.length === 0) continue;
-          // Pega produto diferente do já escolhido, se possível
-          const alreadyPicked = featured.find(p => p.category?.trim() === cat);
-          const remaining = pool.filter(p => p !== alreadyPicked);
-          const pick = remaining.length > 0
-            ? remaining[Math.floor(Math.random() * remaining.length)]
-            : pool[Math.floor(Math.random() * pool.length)];
-          featured.push(pick);
-        }
       }
 
       if (featured.length > 0) setFeaturedProducts(featured);
       setLoadingFeatured(false);
     };
 
-    fetchDiverseFeatured().catch(() => setLoadingFeatured(false));
-  }, []);
+    fetchFeatured().catch(() => setLoadingFeatured(false));
+  }, [categories]);
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-dark">
