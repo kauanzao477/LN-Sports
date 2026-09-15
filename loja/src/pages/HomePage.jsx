@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Shirt, Sparkles, MessageCircle, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
 import { Header } from '../components/common/Header';
@@ -34,11 +34,19 @@ export function HomePage() {
     };
   }, []);
 
+  // hasFetchedRef garante que fetchDiverseFeatured rode UMA única vez.
+  // O StoreContext tem um setInterval de 1,5 s que recria o array `categories`
+  // a cada tick; sem essa guarda, o useEffect re-dispararia a cada 1,5 s.
+  const hasFetchedRef = useRef(false);
+
   // ── Destaques: exatamente 4 produtos, 1 por categoria oficial diferente ──────
   // Lista de candidatas em ordem de preferência (todas oficiais, sem Tênis Esportivos).
   // Busca paralela; pega as 4 primeiras que retornarem produto.
   useEffect(() => {
+    // Aguarda categories chegarem E garante execução única
     if (!categories || categories.length === 0) return;
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
 
     // Candidatas ordenadas por preferência — todas categorias oficiais exceto tênis esportivos.
     // São exatamente as categorias definidas em OFFICIAL_CATEGORIES (sem invenção).
