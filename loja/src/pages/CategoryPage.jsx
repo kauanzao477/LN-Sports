@@ -1,25 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronRight, Filter, ArrowUpDown } from 'lucide-react';
+import { ChevronRight, ArrowUpDown } from 'lucide-react';
 import { Header } from '../components/common/Header';
 import { Footer } from '../components/common/Footer';
 import { ProductGrid } from '../components/product/ProductGrid';
 import { ConversionInfoPage } from './ConversionInfoPage';
-import { productService, PRODUCTS_PER_PAGE, getProductSubcategory, normalizeStr } from '../services/productService';
+import { productService, PRODUCTS_PER_PAGE } from '../services/productService';
 import { categoryService } from '../services/categoryService';
 
-import { slugify } from '../utils/slugify';
-
 export function CategoryPage() {
-  const { slug, subcategorySlug } = useParams();
+  const { slug } = useParams();
   const [category, setCategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
-  // Ref to track the latest load request for the product subscription
-  const loadIdRef = useRef(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Carrega informações da categoria
   useEffect(() => {
@@ -28,70 +26,58 @@ export function CategoryPage() {
       setCategory(found || { name: slug.replace(/-/g, ' ').toUpperCase(), slug });
     }
     loadCat();
-    // When slug (i.e., category) changes, reset subcategory and pagination state
+    // Ao trocar de categoria, reseta estado
     setSelectedSubcategory(null);
     setCurrentPage(1);
-    // DEBUG: log category slug change
-    console.log('[CategoryPage] slug changed:', slug);
   }, [slug]);
 
-  // Carrega produtos da categoria em tempo real
+  // Carrega produtos da página atual via API (server-side pagination)
   useEffect(() => {
-    // Skip product loading for conversion info page
-    if (category?.slug === 'tabela-de-conversao-br-x-eur') return;
-    // Guard ref to discard callbacks once this effect is cleaned up
-    const active = { current: true };
     if (!category) return;
+    // Não carrega produtos para a página de conversão
+    if (category?.slug === 'tabela-de-conversao-br-x-eur') return;
+
+    let cancelled = false;
     setLoading(true);
-    // Invalida imediatamente a lista anterior
-    setProducts([]);
-    // Identificador único para esta carga
-    const loadId = Date.now();
-    loadIdRef.current = loadId;
 
-    const unsubscribe = productService.subscribeProducts({
-      status: 'all',
-      category: category.name,
-      callback: (items) => {
-        // Se o efeito já foi limpo, ignore
-        if (!active.current) return;
-        // Ignora callbacks de carregamentos anteriores
-        if (loadIdRef.current !== loadId) return;
-        // DEBUG: log subscription callback details
-        console.log('[CategoryPage] received', items.length, 'items for category', category?.name);
-        console.log('[CategoryPage] first items IDs/sourceUrl/category:', items.slice(0,5).map(i=>({id:i.id,slug:i.slug,sourceUrl:i.sourceUrl,category:i.category})));
+    async function loadPage() {
+      try {
+        const result = await productService.getProducts({
+          status: 'all',
+          category: category.name,
+          subcategory: selectedSubcategory || null,
+          sortBy,
+          page: currentPage,
+          limitCount: PRODUCTS_PER_PAGE,
+        });
+
+        if (cancelled) return;
+
+        const items = result?.data || [];
         setProducts(items);
+        setTotalPages(result?.totalPages || 1);
+        setTotalCount(result?.total || items.length);
         setLoading(false);
-        setCurrentPage(1);
-      },
-    });
 
-    return () => {
-      // Marca como inativo antes de cancelar a subscription
-      active.current = false;
-      // DEBUG: log unsubscribe
-      console.log('[CategoryPage] unsubscribing from productService for category', category?.name);
-      if (typeof unsubscribe === 'function') unsubscribe();
-    };
-  }, [category, sortBy]);
+        console.log(
+          `[CategoryPage] page=${result?.page}/${result?.totalPages} total=${result?.total} items=${items.length}`,
+        );
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[CategoryPage] getProducts error:', err.message);
+          setLoading(false);
+        }
+      }
+    }
 
-  // Deriva produtos filtrados por subcategoria (mantém o estado original de produtos intacto)
-  const filteredProducts = selectedSubcategory
-    ? products.filter(p => {
-        const productSub = getProductSubcategory(p);
-        const selectedNorm = normalizeStr(selectedSubcategory);
-        return productSub === selectedNorm;
-      })
-    : products;
-// Reset page when subcategory changes
-useEffect(() => {
-  setCurrentPage(1);
-}, [selectedSubcategory]);
+    loadPage();
+    return () => { cancelled = true; };
+  }, [category, selectedSubcategory, sortBy, currentPage]);
 
-// Paginação baseada nos produtos já filtrados
-  // Paginação baseada nos produtos já filtrados
-  const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) || 1;
-  const displayedProducts = filteredProducts.slice((currentPage - 1) * PRODUCTS_PER_PAGE, currentPage * PRODUCTS_PER_PAGE);
+  // Reset page when subcategory or sort changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedSubcategory, sortBy]);
 
   const goToPage = (page) => {
     if (page < 1 || page > totalPages) return;
@@ -101,10 +87,9 @@ useEffect(() => {
 
   const renderPageNumbers = () => {
     const pages = [];
-    const maxVisible = 5; // show up to 5 page numbers
+    const maxVisible = 5;
     let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
     let end = Math.min(totalPages, start + maxVisible - 1);
-    // adjust start if we are near the end
     start = Math.max(1, end - maxVisible + 1);
     for (let i = start; i <= end; i++) {
       pages.push(
@@ -152,11 +137,10 @@ useEffect(() => {
                 {category?.name || 'Catálogo'}
               </h1>
               <p className="text-xs sm:text-sm text-brand-muted mt-0.5">
-                {products.length} {products.length === 1 ? 'produto publicado' : 'produtos publicados'}
+                {totalCount} {totalCount === 1 ? 'produto publicado' : 'produtos publicados'}
               </p>
             </div>
           )}
-
 
           {/* Ordenação */}
           <div className="flex items-center gap-2">
@@ -209,7 +193,7 @@ useEffect(() => {
           <>
             {/* Grid de Produtos */}
             <ProductGrid
-              products={displayedProducts}
+              products={products}
               loading={loading}
               emptyTitle="Nenhum manto publicado nesta categoria ainda"
               emptyMessage="Volte em breve ou fale com nosso atendente pelo WhatsApp para encomendar modelos específicos."

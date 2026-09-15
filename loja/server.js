@@ -327,8 +327,6 @@ app.get('/api/categories', async (req, res) => {
     { id: 'tenis-on-running-e-hoka',    name: 'Tênis On Running e HOKA',             slug: 'tenis-on-running-e-hoka' },
     { id: 'tenis-casuais-senha-hjh001077',  name: 'Tênis Casuais - Senha: HJH001077',   slug: 'tenis-casuais-senha-hjh001077' },
     { id: 'tenis-esportivos-senha-888888',  name: 'Tênis Esportivos - Senha: 888888',   slug: 'tenis-esportivos-senha-888888' },
-    { id: 'selecoes',                   name: 'Seleções',                            slug: 'selecoes' },
-    { id: 'clubes-europeus',            name: 'Clubes Europeus',                     slug: 'clubes-europeus' },
   ];
 
   if (!db) {
