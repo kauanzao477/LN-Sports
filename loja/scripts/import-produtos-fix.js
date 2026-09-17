@@ -5,7 +5,7 @@
  * UPSERT por source_url. Não altera produtos.json.
  */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -15,6 +15,8 @@ const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
   console.error('DATABASE_URL nao definida.');
@@ -23,7 +25,7 @@ if (!DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: false,
+  ssl: DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
   max: 5,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
@@ -88,6 +90,9 @@ async function ensureSchema(client) {
 
 function safeDate(val) {
   if (!val) return new Date();
+  if (typeof val === 'string') {
+    val = val.replace(/\+00:00Z$/, 'Z').replace(/Z\+00:00$/, 'Z');
+  }
   const d = new Date(val);
   return isNaN(d.getTime()) ? new Date() : d;
 }

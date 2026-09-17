@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "import-produtos": "node scripts/import-produtos.js"
+    "import-produtos": "node scripts/import-produtos-fix.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
