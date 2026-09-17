@@ -1,0 +1,16 @@
+{
+  "total_produtos_antes": 50222,
+  "total_produtos_depois": 50222,
+  "tenis_esportivos_antes": 25015,
+  "tenis_esportivos_depois": 25015,
+  "produtos_novos_criados": 0,
+  "produtos_corrigidos": 0,
+  "produtos_sem_alteracao": 25015,
+  "produtos_com_falha": 1106,
+  "imagens_antes": 110515,
+  "imagens_depois": 298315,
+  "imagens_adicionadas": 187800,
+  "media_imagens_antes": 4.42,
+  "media_imagens_depois": 11.93,
+  "tempo_total_segundos": 4514.99
+}
