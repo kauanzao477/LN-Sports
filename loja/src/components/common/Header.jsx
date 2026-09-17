@@ -30,14 +30,16 @@ export function Header() {
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
-  // Exibe as categorias no menu de navegação desktop — apenas categorias oficiais
-  const navCategories = categories.filter(
-    (cat) =>
-      cat.name !== 'Tênis de Corrida' &&
-      cat.name !== 'Tênis Esportivo' &&
-      !cat.name?.includes('Senha:') &&
-      !cat.slug?.includes('senha')
-  );
+  // Exibe as categorias no menu de navegação — apenas categorias oficiais únicas
+  const seenSlugs = new Set();
+  const navCategories = categories.filter((cat) => {
+    if (!cat?.slug || !cat?.name) return false;
+    if (cat.name === 'Tênis de Corrida' || cat.name === 'Tênis Esportivo') return false;
+    if (cat.name?.includes('Senha:') || cat.slug?.includes('senha')) return false;
+    if (seenSlugs.has(cat.slug)) return false;
+    seenSlugs.add(cat.slug);
+    return true;
+  });
 
   return (
     <header className="sticky top-0 z-40 bg-brand-dark/97 backdrop-blur-md border-b border-brand-border/80">
@@ -103,7 +105,7 @@ export function Header() {
           >
             Início
           </Link>
-          {categories.map((cat) => (
+          {navCategories.map((cat) => (
             <Link
               key={cat.id || cat.slug}
               to={`/categoria/${cat.slug}`}

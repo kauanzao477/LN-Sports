@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -11,6 +12,61 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+function normalizeCategory(cat = '', url = '') {
+  if (url.includes('lvguccinike.x.yupoo.com') || url.includes('ywq2000.x.yupoo.com')) return 'Chuteiras';
+  if (url.includes('mzrycm102618.x.yupoo.com') && url.includes('/4742786')) return 'Chuteiras Infantil';
+  if (cat.startsWith('Catálogo de Chuteiras - 0') || cat.startsWith('Catalogo de Chuteiras - 0')) return 'Chuteiras';
+  if (cat === 'Catálogo de Chuteiras - Infantil' || cat.includes('Infantil')) return 'Chuteiras Infantil';
+  if (cat.toLowerCase().startsWith('tênis casuais') || cat.toLowerCase().startsWith('tenis casuais')) return 'Tênis Casuais';
+  if (cat.toLowerCase().startsWith('tênis esportivos') || cat.toLowerCase().startsWith('tenis esportivos')) return 'Tênis Esportivos';
+  return cat;
+}
+
+// In-memory catalog fallback quando DATABASE_URL não estiver configurada
+let memoryProducts = null;
+function getMemoryProducts() {
+  if (!memoryProducts) {
+    const candidatePaths = [
+      path.resolve(__dirname, 'src', 'data', 'produtos.json'),
+      path.resolve(__dirname, 'public', 'data', 'produtos.json'),
+      path.resolve(__dirname, 'dist', 'data', 'produtos.json'),
+      path.resolve(__dirname, 'dist', 'produtos.json'),
+    ];
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        try {
+          const list = JSON.parse(fs.readFileSync(p, 'utf-8'));
+          if (Array.isArray(list) && list.length > 0) {
+            memoryProducts = list.map((item, idx) => ({
+              id: item.id || String(idx + 1),
+              name: item.name || '',
+              slug: item.slug || (item.name ? item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : `prod-${idx}`),
+              category: normalizeCategory(item.category || '', item.sourceUrl || ''),
+              originalCategory: item.originalCategory || item.category || '',
+              subcategory: item.subcategory || '',
+              images: Array.isArray(item.images) ? item.images : [],
+              sourceUrl: item.sourceUrl || '',
+              sourceProvider: item.sourceProvider || 'yupoo',
+              description: item.description || '',
+              published: item.published !== false,
+              featured: !!item.featured,
+              status: item.status || 'published',
+              mainImageIndex: item.mainImageIndex || 0,
+              createdAt: item.createdAt || new Date(Date.now() - idx * 1000).toISOString(),
+              updatedAt: item.updatedAt || new Date().toISOString()
+            }));
+            console.log(`[MemoryCatalog] Carregados ${memoryProducts.length} produtos em memória para respostas instantâneas.`);
+            break;
+          }
+        } catch (err) {
+          console.error('[MemoryCatalog] Erro ao carregar produtos.json:', err.message);
+        }
+      }
+    }
+  }
+  return memoryProducts || [];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PostgreSQL Pool
@@ -197,11 +253,62 @@ app.get('/api/image-proxy', imageProxyHandler);
 // PUBLIC API
 // ─────────────────────────────────────────────────────────────────────────────
 
-// GET /api/products
-// Query params: page, limit, category, subcategory, status, search, sort, featured
 app.get('/api/products', async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  if (!db) {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 24));
+    const offset = (page - 1) * limit;
+    const category = req.query.category || null;
+    const subcategory = req.query.subcategory || null;
+    const status = req.query.status || null;
+    const search = req.query.search ? req.query.search.toLowerCase().trim() : null;
+    const sort = req.query.sort || 'newest';
+
+    let list = getMemoryProducts();
+
+    if (status && status !== 'all') {
+      list = list.filter(p => p.status === status);
+    }
+    if (category) {
+      const catNorm = category.toLowerCase().trim();
+      list = list.filter(p => {
+        const pCat = (p.category || '').toLowerCase();
+        if (catNorm === 'tênis casuais' || catNorm === 'tenis casuais' || catNorm === 'tenis-casuais') {
+          return pCat.startsWith('tênis casuais') || pCat.startsWith('tenis casuais');
+        }
+        if (catNorm === 'tênis esportivos' || catNorm === 'tenis esportivos' || catNorm === 'tenis-esportivos') {
+          return pCat.startsWith('tênis esportivos') || pCat.startsWith('tenis esportivos');
+        }
+        return pCat === catNorm || pCat.replace(/[^a-z0-9]+/g, '-') === catNorm;
+      });
+    }
+    if (subcategory) {
+      const subNorm = subcategory.toLowerCase().trim();
+      list = list.filter(p => (p.subcategory || '').toLowerCase() === subNorm);
+    }
+    if (search) {
+      list = list.filter(p =>
+        p.name.toLowerCase().includes(search) ||
+        (p.category || '').toLowerCase().includes(search) ||
+        (p.subcategory || '').toLowerCase().includes(search)
+      );
+    }
+
+    if (sort === 'name-asc') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === 'name-desc') list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+
+    const total = list.length;
+    const sliced = list.slice(offset, offset + limit);
+
+    return res.json({
+      data: sliced,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      limit,
+    });
+  }
 
   try {
     const page     = Math.max(1, parseInt(req.query.page)  || 1);
@@ -279,10 +386,14 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-// GET /api/products/:slug
 app.get('/api/products/:slug', async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  if (!db) {
+    const list = getMemoryProducts();
+    const product = list.find(p => p.slug === req.params.slug || (p.sourceUrl && p.sourceUrl.includes(req.params.slug)));
+    if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
+    return res.json(product);
+  }
 
   try {
     const { rows } = await db.query(
@@ -297,10 +408,16 @@ app.get('/api/products/:slug', async (req, res) => {
   }
 });
 
-// GET /api/products/:slug/related
 app.get('/api/products/:slug/related', async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  if (!db) {
+    const list = getMemoryProducts();
+    const product = list.find(p => p.slug === req.params.slug);
+    if (!product) return res.json([]);
+    const limit = Math.min(12, parseInt(req.query.limit) || 4);
+    const related = list.filter(p => p.category === product.category && p.slug !== product.slug).slice(0, limit);
+    return res.json(related);
+  }
 
   try {
     const product = (await db.query('SELECT * FROM products WHERE slug = $1 LIMIT 1', [req.params.slug])).rows[0];
@@ -340,7 +457,30 @@ app.get('/api/categories', async (req, res) => {
   };
 
   if (!db) {
-    return res.json(OFFICIAL_CATEGORIES.map(c => ({ ...c, productCount: 0, subcategories: [] })));
+    const list = getMemoryProducts();
+    const countMap = {};
+    const subMap = {};
+
+    for (const p of list) {
+      let cat = (p.category || '').toLowerCase();
+      if (cat.startsWith('tênis casuais') || cat.startsWith('tenis casuais')) cat = 'tênis casuais';
+      else if (cat.startsWith('tênis esportivos') || cat.startsWith('tenis esportivos')) cat = 'tênis esportivos';
+      countMap[cat] = (countMap[cat] || 0) + 1;
+
+      if (p.subcategory) {
+        if (!subMap[cat]) subMap[cat] = new Set();
+        subMap[cat].add(p.subcategory);
+      }
+    }
+
+    return res.json(OFFICIAL_CATEGORIES.map(c => {
+      const key = c.name.toLowerCase();
+      return {
+        ...c,
+        productCount: countMap[key] || 0,
+        subcategories: subMap[key] ? Array.from(subMap[key]).sort() : [],
+      };
+    }));
   }
 
   try {
@@ -393,7 +533,7 @@ app.get('/api/settings', async (req, res) => {
     whatsappEnabled: true,
     defaultMessage: 'Olá! Gostaria de falar com um atendente da LN SPORTS.',
     productMessageTemplate: 'Olá! Tenho interesse neste produto:\nProduto: {productName}\nLink: {productUrl}\nGostaria de saber mais informações com um atendente.',
-    instagramUrl: 'https://instagram.com/lnsports',
+    instagramUrl: process.env.VITE_STORE_INSTAGRAM_URL || 'https://www.instagram.com/ln.sportsss/',
     announcementText: '🚀 Catálogo Oficial LN SPORTS — Envio para todo o Brasil via Atendimento Exclusivo no WhatsApp',
   };
   if (!db) return res.json(DEFAULT);
@@ -544,7 +684,19 @@ app.post('/api/admin/login', async (req, res) => {
 // GET /api/admin/dashboard
 app.get('/api/admin/dashboard', requireAuth, async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  if (!db) {
+    const list = getMemoryProducts();
+    return res.json({
+      total: list.length,
+      published: list.filter(p => p.status === 'published').length,
+      draft: list.filter(p => p.status === 'draft').length,
+      inactive: list.filter(p => p.status === 'inactive').length,
+      featured: list.filter(p => p.featured).length,
+      categoriesCount: 8,
+      withoutImages: list.filter(p => !p.images || !p.images.length).length,
+      withoutDescription: list.filter(p => !p.description).length,
+    });
+  }
   try {
     const { rows } = await db.query(`
       SELECT
@@ -673,7 +825,20 @@ app.patch('/api/admin/products/:id/main-image', requireAuth, async (req, res) =>
 // PATCH /api/admin/products/:id/cover — Definir imagem existente como capa (images[0])
 app.patch('/api/admin/products/:id/cover', requireAuth, async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  if (!db) {
+    const list = getMemoryProducts();
+    const prod = list.find(p => String(p.id) === String(req.params.id) || p.slug === req.params.id);
+    if (!prod) return res.status(404).json({ error: 'Produto não encontrado' });
+    const { images, coverIndex } = req.body || {};
+    if (images && Array.isArray(images)) {
+      prod.images = images;
+    } else if (coverIndex !== undefined && Array.isArray(prod.images) && prod.images[coverIndex]) {
+      const chosen = prod.images[coverIndex];
+      prod.images = [chosen, ...prod.images.filter((_, i) => i !== coverIndex)];
+    }
+    prod.mainImageIndex = 0;
+    return res.json(prod);
+  }
   try {
     const { images, coverIndex } = req.body || {};
     let newImages = images;

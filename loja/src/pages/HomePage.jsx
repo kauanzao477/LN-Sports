@@ -97,7 +97,7 @@ export function HomePage() {
                   className="w-full sm:w-auto px-8"
                 />
                 <Link
-                  to="/busca"
+                  to="/categoria/camisetas-de-time"
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-brand-surface hover:bg-brand-card text-white text-base font-bold border border-brand-border hover:border-brand-purpleLight transition-all"
                 >
                   <span>Explorar Catálogo</span>

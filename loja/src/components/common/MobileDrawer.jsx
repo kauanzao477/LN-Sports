@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { X, ChevronRight, ShieldCheck } from 'lucide-react';
+import { X, ChevronRight, ShieldCheck, Instagram } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { WhatsAppButton } from './WhatsAppButton';
 
@@ -23,6 +23,16 @@ export function MobileDrawer({ isOpen, onClose }) {
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const seenSlugs = new Set();
+  const validCategories = categories.filter((cat) => {
+    if (!cat?.slug || !cat?.name) return false;
+    if (cat.name === 'Tênis de Corrida' || cat.name === 'Tênis Esportivo') return false;
+    if (cat.name?.includes('Senha:') || cat.slug?.includes('senha')) return false;
+    if (seenSlugs.has(cat.slug)) return false;
+    seenSlugs.add(cat.slug);
+    return true;
+  });
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -78,7 +88,7 @@ export function MobileDrawer({ isOpen, onClose }) {
           </div>
 
           {/* Lista de categorias */}
-          {categories.map((cat) => (
+          {validCategories.map((cat) => (
             <Link
               key={cat.id || cat.slug}
               to={`/categoria/${cat.slug}`}
@@ -97,6 +107,17 @@ export function MobileDrawer({ isOpen, onClose }) {
             text="Falar no WhatsApp"
             className="w-full justify-center py-3"
           />
+
+          <a
+            href={settings?.instagramUrl || 'https://www.instagram.com/ln.sportsss/'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-brand-surface hover:bg-brand-card text-white text-xs font-bold border border-brand-border hover:border-pink-500/40 transition-colors"
+          >
+            <Instagram className="w-4 h-4 text-pink-400" />
+            <span>Siga @ln.sportsss</span>
+          </a>
+
           <div className="flex items-center justify-between text-xs text-brand-muted pt-1">
             <span>LN SPORTS © 2026</span>
             <Link

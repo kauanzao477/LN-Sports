@@ -144,8 +144,24 @@ function saveLocalCategories(cats) {
   } catch (e) {}
 }
 
+function getCustomCategories() {
+  try {
+    const saved = localStorage.getItem('ln_sports_custom_categories');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return [];
+}
+
+function saveCustomCategories(cats) {
+  try {
+    localStorage.setItem('ln_sports_custom_categories', JSON.stringify(cats));
+  } catch (e) {}
+}
+
 function sanitizeCategories(rawCategories = []) {
-  const OFFICIAL_SLUGS = new Set(OFFICIAL_CATEGORIES.map(c => c.slug));
+  const custom = getCustomCategories();
+  const officialSlugs = new Set(OFFICIAL_CATEGORIES.map(c => c.slug));
+  const customSlugs = new Set(custom.map(c => c.slug));
   const seen = new Set();
   const cleaned = [];
 
@@ -158,7 +174,7 @@ function sanitizeCategories(rawCategories = []) {
     let slug = cat.slug || slugify(name);
     if (CATEGORY_SLUG_ALIASES[slug]) slug = CATEGORY_SLUG_ALIASES[slug];
 
-    if (!OFFICIAL_SLUGS.has(slug)) continue;
+    if (!officialSlugs.has(slug) && !customSlugs.has(slug)) continue;
     if (seen.has(slug)) continue;
     seen.add(slug);
 
@@ -178,8 +194,16 @@ function sanitizeCategories(rawCategories = []) {
     }
   }
 
-  // Ordena de acordo com OFFICIAL_CATEGORIES
-  return OFFICIAL_CATEGORIES.map(oc => cleaned.find(c => c.slug === oc.slug) || oc);
+  // Completa com categorias customizadas
+  for (const c of custom) {
+    if (!seen.has(c.slug)) {
+      cleaned.push(c);
+      seen.add(c.slug);
+    }
+  }
+
+  // Retorna categorias com oficiais primeiro, seguidas de customizadas
+  return cleaned;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,6 +247,43 @@ export const categoryService = {
       slugify(c.name) === resolved ||
       slugify(c.name) === cleanSlug
     ) || null;
+  },
+
+  /**
+   * Cria uma nova categoria (admin).
+   * Impede duplicatas pelo nome ou slug.
+   */
+  async addCategory(name) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) throw new Error('Nome da categoria é obrigatório.');
+
+    const cleanSlug = slugify(trimmed);
+    const existing = await this.getCategories();
+    const isDup = existing.some(c =>
+      c.slug === cleanSlug ||
+      c.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (isDup) {
+      throw new Error('Esta categoria já existe no catálogo.');
+    }
+
+    const newCat = {
+      id: cleanSlug,
+      name: trimmed,
+      slug: cleanSlug,
+      subcategories: [],
+      productCount: 0,
+      isCustom: true
+    };
+
+    const currentCustom = getCustomCategories();
+    saveCustomCategories([...currentCustom, newCat]);
+
+    try {
+      await this.saveCategory(newCat);
+    } catch (e) {}
+
+    return newCat;
   },
 
   /**

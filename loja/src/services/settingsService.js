@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS = {
   whatsappEnabled: true,
   defaultMessage: 'Olá! Gostaria de falar com um atendente da LN SPORTS.',
   productMessageTemplate: 'Olá! Tenho interesse neste produto:\nProduto: {productName}\nLink: {productUrl}\nGostaria de saber mais informações com um atendente.',
-  instagramUrl: 'https://instagram.com/lnsports',
+  instagramUrl: 'https://www.instagram.com/ln.sportsss/',
   announcementText: '🚀 Catálogo Oficial LN SPORTS — Envio para todo o Brasil via Atendimento Exclusivo no WhatsApp'
 };
 

@@ -5,7 +5,10 @@ import {
   ChevronDown,
   ChevronRight,
   Package,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  CheckCircle,
+  AlertTriangle
 } from "lucide-react";
 import { categoryService, OFFICIAL_CATEGORIES } from "../../services/categoryService";
 import { Link } from "react-router-dom";
@@ -37,7 +40,14 @@ function CategoryCard({ category }) {
           <FolderTree className="w-6 h-6 text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-white font-bold text-sm sm:text-base truncate">{category.name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-white font-bold text-sm sm:text-base truncate">{category.name}</h3>
+            {category.isCustom && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-brand-purple/30 text-brand-purpleLight border border-brand-purple/50">
+                Nova
+              </span>
+            )}
+          </div>
           <p className="text-brand-muted text-xs mt-0.5 font-mono">{category.slug}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -85,20 +95,19 @@ export function AdminCategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState(null);
 
+  // Form de criação de categoria
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [feedback, setFeedback] = useState(null); // { type: "success" | "error", msg }
+
   const loadCategories = async () => {
     setLoading(true);
     try {
       const cats = await categoryService.getCategories();
-      const officialSlugs = new Set(OFFICIAL_CATEGORIES.map(c => c.slug));
-      const filtered = cats.filter(c => officialSlugs.has(c.slug));
-      const ordered = OFFICIAL_CATEGORIES.map(oc => {
-        const match = filtered.find(c => c.slug === oc.slug);
-        return match || oc;
-      });
-      setCategories(ordered);
+      setCategories(cats);
       setLastRefreshed(new Date());
     } catch (err) {
-      console.error("[AdminCategoriesPage] Erro:", err);
+      console.error("[AdminCategoriesPage] Erro ao carregar categorias:", err);
       setCategories(OFFICIAL_CATEGORIES);
     } finally {
       setLoading(false);
@@ -107,15 +116,40 @@ export function AdminCategoriesPage() {
 
   useEffect(() => { loadCategories(); }, []);
 
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) {
+      setFeedback({ type: "error", msg: "Informe o nome da categoria." });
+      return;
+    }
+
+    setAdding(true);
+    setFeedback(null);
+
+    try {
+      const created = await categoryService.addCategory(trimmed);
+      setCategories(prev => [...prev, created]);
+      setNewCategoryName("");
+      setFeedback({ type: "success", msg: `Categoria "${created.name}" adicionada com sucesso!` });
+    } catch (err) {
+      setFeedback({ type: "error", msg: err.message || "Erro ao adicionar categoria." });
+    } finally {
+      setAdding(false);
+      setTimeout(() => setFeedback(null), 5000);
+    }
+  };
+
   const totalProducts = categories.reduce((acc, c) => acc + (c.productCount || 0), 0);
 
   return (
     <div className="space-y-8">
+      {/* Topo */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-black text-white">Categorias</h1>
           <p className="text-xs sm:text-sm text-brand-muted mt-1">
-            {categories.length} categorias oficiais — {totalProducts.toLocaleString("pt-BR")} produtos no total.
+            {categories.length} categorias cadastradas — {totalProducts.toLocaleString("pt-BR")} produtos no catálogo.
           </p>
         </div>
         <button
@@ -128,6 +162,49 @@ export function AdminCategoriesPage() {
         </button>
       </div>
 
+      {/* Formulário: Criar Nova Categoria */}
+      <div className="glass-card rounded-2xl p-5 border border-brand-border bg-gradient-to-r from-brand-surface via-brand-card to-brand-surface">
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+          <Plus className="w-4 h-4 text-brand-purpleLight" />
+          Adicionar Nova Categoria
+        </h2>
+        <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={newCategoryName}
+            onChange={(e) => setNewCategoryName(e.target.value)}
+            placeholder="Ex: Agasalhos & Corta-Ventos, Acessórios..."
+            className="flex-1 bg-brand-dark border border-brand-border rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-brand-muted focus:outline-none focus:border-brand-purple"
+          />
+          <button
+            type="submit"
+            disabled={adding}
+            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-brand-purple hover:bg-brand-purpleLight text-white text-sm font-extrabold shadow-lg shadow-brand-purple/30 transition-all disabled:opacity-50 shrink-0"
+          >
+            {adding ? (
+              <><RefreshCw className="w-4 h-4 animate-spin" /> Adicionando...</>
+            ) : (
+              <><Plus className="w-4 h-4" /> Adicionar</>
+            )}
+          </button>
+        </form>
+
+        {/* Feedback do form */}
+        {feedback && (
+          <div className={`mt-3 flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-medium ${
+            feedback.type === "success"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+              : "bg-rose-500/10 border-rose-500/30 text-rose-400"
+          }`}>
+            {feedback.type === "success"
+              ? <CheckCircle className="w-4 h-4 shrink-0" />
+              : <AlertTriangle className="w-4 h-4 shrink-0" />}
+            <span>{feedback.msg}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Grid de Métricas */}
       <div className="glass-card rounded-2xl p-5 border border-brand-border grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="text-center">
           <p className="text-2xl font-display font-black text-white">{categories.length}</p>
@@ -147,6 +224,7 @@ export function AdminCategoriesPage() {
         </div>
       </div>
 
+      {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-16">
           <div className="flex flex-col items-center gap-4">
@@ -156,6 +234,7 @@ export function AdminCategoriesPage() {
         </div>
       )}
 
+      {/* Lista de Categorias */}
       {!loading && (
         <div className="space-y-3">
           {categories.map(cat => <CategoryCard key={cat.slug} category={cat} />)}
@@ -164,7 +243,7 @@ export function AdminCategoriesPage() {
 
       {lastRefreshed && (
         <p className="text-center text-[11px] text-brand-muted">
-          Atualizado às {lastRefreshed.toLocaleTimeString("pt-BR")} — Categorias oficiais da loja sem senhas ou duplicatas.
+          Atualizado às {lastRefreshed.toLocaleTimeString("pt-BR")} — Categorias oficiais e personalizadas sem duplicatas.
         </p>
       )}
     </div>

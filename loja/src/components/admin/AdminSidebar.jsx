@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   Shirt,
   FolderTree,
-  UploadCloud,
   Settings,
   ExternalLink,
   LogOut
@@ -19,7 +18,6 @@ export function AdminSidebar({ onClose }) {
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/admin/produtos', label: 'Produtos', icon: Shirt },
     { to: '/admin/categorias', label: 'Categorias', icon: FolderTree },
-    { to: '/admin/importacao', label: 'Importador Yupoo', icon: UploadCloud },
     { to: '/admin/configuracoes', label: 'Configurações', icon: Settings },
   ];
 

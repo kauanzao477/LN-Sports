@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Settings,
   MessageCircle,
@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS = {
   whatsappEnabled: true,
   defaultMessage: "Ola! Gostaria de falar com um atendente da LN SPORTS.",
   productMessageTemplate: "Ola! Tenho interesse neste produto:\nProduto: {productName}\nLink: {productUrl}\nGostaria de saber mais informacoes.",
-  instagramUrl: "https://instagram.com/lnsports",
+  instagramUrl: "https://www.instagram.com/ln.sportsss/",
   announcementText: "Catalogo Oficial LN SPORTS - Envio para todo o Brasil via WhatsApp",
 };
 
@@ -232,7 +232,7 @@ export function AdminSettingsPage() {
             type="url"
             value={settings.instagramUrl || ""}
             onChange={handleChange("instagramUrl")}
-            placeholder="https://instagram.com/lnsports"
+            placeholder="https://www.instagram.com/ln.sportsss/"
             className={inputCls}
             id="settings-instagram-url"
           />

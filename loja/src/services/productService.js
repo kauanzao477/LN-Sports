@@ -143,16 +143,25 @@ function apiUrl(path) {
 let liveProductsCache = INITIAL_DEMO_PRODUCTS;
 let lastFetchTimestamp = 0;
 
+let cachedMergedProducts = null;
+let lastSourceListRef = null;
+
 export async function fetchLatestLocalProducts() {
+  // Se já temos produtos carregados na memória, não refaz o download pesado de 62MB
+  if (liveProductsCache && liveProductsCache.length > 10) {
+    return liveProductsCache;
+  }
+
   const now = Date.now();
-  if (now - lastFetchTimestamp > 1200) {
+  if (now - lastFetchTimestamp > 60000) {
     lastFetchTimestamp = now;
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}data/produtos.json?t=${now}`);
+      const res = await fetch(`${import.meta.env.BASE_URL}data/produtos.json`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           liveProductsCache = data;
+          cachedMergedProducts = null; // invalida cache para reprocessar
         }
       }
     } catch (e) { /* silencioso */ }
@@ -161,6 +170,12 @@ export async function fetchLatestLocalProducts() {
 }
 
 function getLocalProducts() {
+  const sourceList = liveProductsCache?.length > 0 ? liveProductsCache : INITIAL_DEMO_PRODUCTS;
+
+  if (cachedMergedProducts && lastSourceListRef === sourceList) {
+    return cachedMergedProducts;
+  }
+
   let adminEdits = {};
   try {
     const saved = localStorage.getItem('ln_sports_admin_edits');
@@ -169,16 +184,16 @@ function getLocalProducts() {
 
   const merged = [];
   const seenUrls = new Set();
-  const sourceList = liveProductsCache?.length > 0 ? liveProductsCache : INITIAL_DEMO_PRODUCTS;
 
-  for (const imp of sourceList) {
+  for (let i = 0; i < sourceList.length; i++) {
+    const imp = sourceList[i];
     if (!imp?.sourceUrl) continue;
     if (seenUrls.has(imp.sourceUrl)) continue;
     seenUrls.add(imp.sourceUrl);
 
     const override = adminEdits[imp.sourceUrl] || adminEdits[imp.slug] || {};
     const product = {
-      id: imp.slug || slugify(imp.name),
+      id: imp.slug || imp.id || String(i),
       ...imp,
       ...override,
       published: imp.published !== false,
@@ -187,6 +202,9 @@ function getLocalProducts() {
     product.category = inferCategory(product);
     merged.push(product);
   }
+
+  lastSourceListRef = sourceList;
+  cachedMergedProducts = merged;
   return merged;
 }
 
