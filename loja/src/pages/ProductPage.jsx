@@ -126,17 +126,12 @@ export function ProductPage() {
           <div className="lg:col-span-5 flex flex-col justify-between">
             <div className="space-y-6">
               
-              {/* Badges de Categoria e Subcategoria */}
+              {/* Badge de Categoria */}
               <div className="flex flex-wrap items-center gap-2">
                 {product.category && (
                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-brand-surface border border-brand-purple/40 text-brand-purpleNeon">
                     <Tag className="w-3 h-3" />
                     <span>{product.category}</span>
-                  </span>
-                )}
-                {product.subcategory && (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-brand-surface border border-brand-border text-brand-purpleLight">
-                    {product.subcategory}
                   </span>
                 )}
                 {product.featured && (

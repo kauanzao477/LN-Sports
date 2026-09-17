@@ -1,9 +1,7 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   FolderTree,
   RefreshCw,
-  ChevronDown,
-  ChevronRight,
   Package,
   ExternalLink,
   Plus,
@@ -29,7 +27,6 @@ function getCategoryColors(slug) {
 }
 
 function CategoryCard({ category }) {
-  const [expanded, setExpanded] = useState(false);
   const colors = getCategoryColors(category.slug);
   const count = category.productCount || 0;
 
@@ -63,29 +60,8 @@ function CategoryCard({ category }) {
           >
             <ExternalLink className="w-4 h-4" />
           </Link>
-          {category.subcategories?.length > 0 && (
-            <button
-              onClick={() => setExpanded(v => !v)}
-              className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-card transition-colors"
-              title="Ver subcategorias"
-            >
-              {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            </button>
-          )}
         </div>
       </div>
-      {expanded && category.subcategories?.length > 0 && (
-        <div className="border-t border-brand-border px-5 py-3 bg-brand-dark/40">
-          <p className="text-[10px] text-brand-muted font-bold uppercase tracking-wider mb-2">Subcategorias</p>
-          <div className="flex flex-wrap gap-2">
-            {category.subcategories.map(sub => (
-              <span key={sub} className="px-2.5 py-1 rounded-lg bg-brand-card text-slate-300 text-xs border border-brand-border">
-                {sub}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -219,8 +195,8 @@ export function AdminCategoriesPage() {
           <p className="text-xs text-brand-muted mt-1">Com produtos</p>
         </div>
         <div className="text-center">
-          <p className="text-2xl font-display font-black text-amber-400">{categories.reduce((acc, c) => acc + (c.subcategories?.length || 0), 0)}</p>
-          <p className="text-xs text-brand-muted mt-1">Subcategorias</p>
+          <p className="text-2xl font-display font-black text-amber-400">{OFFICIAL_CATEGORIES.length}</p>
+          <p className="text-xs text-brand-muted mt-1">Oficiais Ativas</p>
         </div>
       </div>
 

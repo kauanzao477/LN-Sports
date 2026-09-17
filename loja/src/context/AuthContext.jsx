@@ -44,23 +44,22 @@ export function AuthProvider({ children }) {
 
   /**
    * Login via POST /api/admin/login.
-   * Em modo demo (sem DB configurado), aceita qualquer email com "admin" e senha ≥6 chars.
+   * A validação de credenciais ocorre exclusivamente no backend via hash bcrypt.
    */
   const login = async (email, password) => {
     try {
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: (email || '').trim(), password }),
       });
 
       if (res.ok) {
-        const { token, email: adminEmail, demo } = await res.json();
+        const { token, email: adminEmail } = await res.json();
         const userObj = {
           uid: 'admin',
           email: adminEmail || email,
           displayName: 'Administrador LN SPORTS',
-          demo: !!demo,
         };
 
         sessionStorage.setItem(SESSION_KEY, token);
@@ -69,38 +68,12 @@ export function AuthProvider({ children }) {
         setIsAdmin(true);
         return userObj;
       }
+
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Credenciais inválidas. Verifique o e-mail e a senha informados.');
     } catch (e) {
-      // Backend offline ou proxy indisponível — prossegue para autenticação autônoma
+      throw new Error(e.message || 'Erro ao comunicar com o servidor de autenticação.');
     }
-
-    // Validação autônoma de credenciais do administrador
-    const normEmail = (email || '').trim().toLowerCase();
-    const isAdminUser = normEmail === 'admin@lnsports.com' || normEmail.includes('admin');
-    const isValidPass = password === 'admin123456' || (password && password.length >= 6);
-
-    if (isAdminUser && isValidPass) {
-      const payload = {
-        email: normEmail,
-        role: 'admin',
-        demo: true,
-        exp: Math.floor(Date.now() / 1000) + (8 * 3600)
-      };
-      const dummyToken = `sim.${btoa(JSON.stringify(payload))}.sig`;
-      const userObj = {
-        uid: 'admin',
-        email: normEmail,
-        displayName: 'Administrador LN SPORTS',
-        demo: true,
-      };
-
-      sessionStorage.setItem(SESSION_KEY, dummyToken);
-      sessionStorage.setItem(USER_KEY, JSON.stringify(userObj));
-      setUser(userObj);
-      setIsAdmin(true);
-      return userObj;
-    }
-
-    throw new Error('Credenciais inválidas. Verifique o e-mail e a senha informados.');
   };
 
   const logout = () => {

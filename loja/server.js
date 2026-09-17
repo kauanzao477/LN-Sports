@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -56,7 +57,7 @@ function getMemoryProducts() {
               createdAt: item.createdAt || new Date(Date.now() - idx * 1000).toISOString(),
               updatedAt: item.updatedAt || new Date().toISOString()
             }));
-            console.log(`[MemoryCatalog] Carregados ${memoryProducts.length} produtos em memória para respostas instantâneas.`);
+            console.log(`[MemoryCatalog] Carregados ${memoryProducts.length} produtos em memória para fallback resiliente.`);
             break;
           }
         } catch (err) {
@@ -68,16 +69,80 @@ function getMemoryProducts() {
   return memoryProducts || [];
 }
 
+// Função de busca e paginação em memória (fallback idêntico ao PostgreSQL)
+function queryMemoryProducts(req) {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 24));
+  const offset = (page - 1) * limit;
+  const category = req.query.category || null;
+  const subcategory = req.query.subcategory || null;
+  const status = req.query.status || null;
+  const search = req.query.search ? req.query.search.toLowerCase().trim() : null;
+  const sort = req.query.sort || 'newest';
+  const featured = req.query.featured !== undefined ? req.query.featured === 'true' : null;
+
+  let list = getMemoryProducts();
+
+  if (status && status !== 'all') {
+    list = list.filter(p => p.status === status);
+  }
+  if (category) {
+    const catNorm = category.toLowerCase().trim();
+    list = list.filter(p => {
+      const pCat = (p.category || '').toLowerCase();
+      if (catNorm === 'tênis casuais' || catNorm === 'tenis casuais' || catNorm === 'tenis-casuais') {
+        return pCat.startsWith('tênis casuais') || pCat.startsWith('tenis casuais');
+      }
+      if (catNorm === 'tênis esportivos' || catNorm === 'tenis esportivos' || catNorm === 'tenis-esportivos') {
+        return pCat.startsWith('tênis esportivos') || pCat.startsWith('tenis esportivos');
+      }
+      return pCat === catNorm || pCat.replace(/[^a-z0-9]+/g, '-') === catNorm;
+    });
+  }
+  if (subcategory) {
+    const subNorm = subcategory.toLowerCase().trim();
+    list = list.filter(p => (p.subcategory || '').toLowerCase() === subNorm);
+  }
+  if (featured !== null) {
+    list = list.filter(p => p.featured === featured);
+  }
+  if (search) {
+    list = list.filter(p =>
+      p.name.toLowerCase().includes(search) ||
+      (p.category || '').toLowerCase().includes(search) ||
+      (p.subcategory || '').toLowerCase().includes(search)
+    );
+  }
+
+  if (sort === 'name-asc') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  else if (sort === 'name-desc') list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+  else if (sort === 'featured') list = [...list].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+
+  const total = list.length;
+  const sliced = list.slice(offset, offset + limit);
+
+  return {
+    data: sliced,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+    limit,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PostgreSQL Pool
 // ─────────────────────────────────────────────────────────────────────────────
 let pool = null;
+let isDbConnected = false;
 
 function getPool() {
-  if (!pool && process.env.DATABASE_URL) {
+  const dbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : '';
+  if (!pool && dbUrl) {
+    const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
+      connectionString: dbUrl,
+      ssl: isLocal ? false : { rejectUnauthorized: false },
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -90,15 +155,25 @@ function getPool() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DDL — Criação das tabelas (idempotente)
+// DDL — Criação das tabelas e teste de conexão (idempotente)
 // ─────────────────────────────────────────────────────────────────────────────
 async function initDB() {
-  const db = getPool();
-  if (!db) {
-    console.warn('[DB] DATABASE_URL não definida — rodando sem PostgreSQL.');
+  const dbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : '';
+  if (!dbUrl) {
+    console.warn('[DB] ℹ️ DATABASE_URL não configurada no ambiente. Aplicação operando com catálogo JSON em fallback.');
     return;
   }
+
+  const db = getPool();
+  if (!db) return;
+
   try {
+    // Testa conectividade primeiro
+    const client = await db.connect();
+    client.release();
+    isDbConnected = true;
+    console.log('[DB] ✅ Conexão PostgreSQL estabelecida com sucesso.');
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS products (
         id                SERIAL PRIMARY KEY,
@@ -159,10 +234,11 @@ async function initDB() {
         VALUES ($1, $2)
         ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
       `, [process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD_HASH]);
-      console.log('[DB] Admin seed aplicado.');
+      console.log('[DB] Admin seed aplicado no PostgreSQL.');
     }
   } catch (err) {
-    console.error('[DB] Erro ao inicializar schema:', err.message);
+    isDbConnected = false;
+    console.warn(`[DB] ⚠️ Falha ao conectar ao PostgreSQL (${err.message}). Mantendo fallback do catálogo JSON.`);
   }
 }
 
@@ -255,59 +331,8 @@ app.get('/api/image-proxy', imageProxyHandler);
 
 app.get('/api/products', async (req, res) => {
   const db = getPool();
-  if (!db) {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 24));
-    const offset = (page - 1) * limit;
-    const category = req.query.category || null;
-    const subcategory = req.query.subcategory || null;
-    const status = req.query.status || null;
-    const search = req.query.search ? req.query.search.toLowerCase().trim() : null;
-    const sort = req.query.sort || 'newest';
-
-    let list = getMemoryProducts();
-
-    if (status && status !== 'all') {
-      list = list.filter(p => p.status === status);
-    }
-    if (category) {
-      const catNorm = category.toLowerCase().trim();
-      list = list.filter(p => {
-        const pCat = (p.category || '').toLowerCase();
-        if (catNorm === 'tênis casuais' || catNorm === 'tenis casuais' || catNorm === 'tenis-casuais') {
-          return pCat.startsWith('tênis casuais') || pCat.startsWith('tenis casuais');
-        }
-        if (catNorm === 'tênis esportivos' || catNorm === 'tenis esportivos' || catNorm === 'tenis-esportivos') {
-          return pCat.startsWith('tênis esportivos') || pCat.startsWith('tenis esportivos');
-        }
-        return pCat === catNorm || pCat.replace(/[^a-z0-9]+/g, '-') === catNorm;
-      });
-    }
-    if (subcategory) {
-      const subNorm = subcategory.toLowerCase().trim();
-      list = list.filter(p => (p.subcategory || '').toLowerCase() === subNorm);
-    }
-    if (search) {
-      list = list.filter(p =>
-        p.name.toLowerCase().includes(search) ||
-        (p.category || '').toLowerCase().includes(search) ||
-        (p.subcategory || '').toLowerCase().includes(search)
-      );
-    }
-
-    if (sort === 'name-asc') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    else if (sort === 'name-desc') list = [...list].sort((a, b) => b.name.localeCompare(a.name));
-
-    const total = list.length;
-    const sliced = list.slice(offset, offset + limit);
-
-    return res.json({
-      data: sliced,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-      limit,
-    });
+  if (!db || !isDbConnected) {
+    return res.json(queryMemoryProducts(req));
   }
 
   try {
@@ -381,14 +406,14 @@ app.get('/api/products', async (req, res) => {
       limit,
     });
   } catch (err) {
-    console.error('[API] GET /api/products error:', err.message);
-    res.status(500).json({ error: 'Erro interno ao buscar produtos' });
+    console.warn('[API] Falha no PostgreSQL em /api/products, usando fallback do catálogo JSON:', err.message);
+    return res.json(queryMemoryProducts(req));
   }
 });
 
 app.get('/api/products/:slug', async (req, res) => {
   const db = getPool();
-  if (!db) {
+  if (!db || !isDbConnected) {
     const list = getMemoryProducts();
     const product = list.find(p => p.slug === req.params.slug || (p.sourceUrl && p.sourceUrl.includes(req.params.slug)));
     if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
@@ -400,17 +425,25 @@ app.get('/api/products/:slug', async (req, res) => {
       'SELECT * FROM products WHERE slug = $1 LIMIT 1',
       [req.params.slug]
     );
-    if (!rows.length) return res.status(404).json({ error: 'Produto não encontrado' });
+    if (!rows.length) {
+      const list = getMemoryProducts();
+      const product = list.find(p => p.slug === req.params.slug || (p.sourceUrl && p.sourceUrl.includes(req.params.slug)));
+      if (product) return res.json(product);
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
     res.json(rowToProduct(rows[0]));
   } catch (err) {
-    console.error('[API] GET /api/products/:slug error:', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    console.warn('[API] Falha no PostgreSQL em /api/products/:slug, usando fallback em memória:', err.message);
+    const list = getMemoryProducts();
+    const product = list.find(p => p.slug === req.params.slug || (p.sourceUrl && p.sourceUrl.includes(req.params.slug)));
+    if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
+    return res.json(product);
   }
 });
 
 app.get('/api/products/:slug/related', async (req, res) => {
   const db = getPool();
-  if (!db) {
+  if (!db || !isDbConnected) {
     const list = getMemoryProducts();
     const product = list.find(p => p.slug === req.params.slug);
     if (!product) return res.json([]);
@@ -429,8 +462,13 @@ app.get('/api/products/:slug/related', async (req, res) => {
     );
     res.json(rows.map(rowToProduct));
   } catch (err) {
-    console.error('[API] GET /api/products/:slug/related error:', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    console.warn('[API] Falha no PostgreSQL em /api/products/:slug/related, usando fallback em memória:', err.message);
+    const list = getMemoryProducts();
+    const product = list.find(p => p.slug === req.params.slug);
+    if (!product) return res.json([]);
+    const limit = Math.min(12, parseInt(req.query.limit) || 4);
+    const related = list.filter(p => p.category === product.category && p.slug !== product.slug).slice(0, limit);
+    return res.json(related);
   }
 });
 
@@ -456,31 +494,27 @@ app.get('/api/categories', async (req, res) => {
     'tênis esportivos - senha: 888888':  'Tênis Esportivos',
   };
 
-  if (!db) {
+  function getMemoryCategories() {
     const list = getMemoryProducts();
     const countMap = {};
-    const subMap = {};
-
     for (const p of list) {
       let cat = (p.category || '').toLowerCase();
       if (cat.startsWith('tênis casuais') || cat.startsWith('tenis casuais')) cat = 'tênis casuais';
       else if (cat.startsWith('tênis esportivos') || cat.startsWith('tenis esportivos')) cat = 'tênis esportivos';
       countMap[cat] = (countMap[cat] || 0) + 1;
-
-      if (p.subcategory) {
-        if (!subMap[cat]) subMap[cat] = new Set();
-        subMap[cat].add(p.subcategory);
-      }
     }
-
-    return res.json(OFFICIAL_CATEGORIES.map(c => {
+    return OFFICIAL_CATEGORIES.map(c => {
       const key = c.name.toLowerCase();
       return {
         ...c,
         productCount: countMap[key] || 0,
-        subcategories: subMap[key] ? Array.from(subMap[key]).sort() : [],
+        subcategories: [],
       };
-    }));
+    });
+  }
+
+  if (!db || !isDbConnected) {
+    return res.json(getMemoryCategories());
   }
 
   try {
@@ -496,31 +530,19 @@ app.get('/api/categories', async (req, res) => {
       countMap[key] = (countMap[key] || 0) + parseInt(r.cnt);
     }
 
-    // Subcategorias por categoria
-    const subResult = await db.query(
-      `SELECT lower(category) as cat, subcategory FROM products WHERE subcategory IS NOT NULL AND subcategory != '' GROUP BY lower(category), subcategory ORDER BY subcategory`
-    );
-    const subMap = {};
-    for (const r of subResult.rows) {
-      const publicName = CATEGORY_DB_ALIASES[r.cat] || null;
-      const key = publicName ? publicName.toLowerCase() : r.cat;
-      if (!subMap[key]) subMap[key] = new Set();
-      subMap[key].add(r.subcategory);
-    }
-
     const categories = OFFICIAL_CATEGORIES.map(cat => {
       const key = cat.name.toLowerCase();
       return {
         ...cat,
         productCount: countMap[key] || 0,
-        subcategories: subMap[key] ? Array.from(subMap[key]).sort() : [],
+        subcategories: [],
       };
     });
 
     res.json(categories);
   } catch (err) {
-    console.error('[API] GET /api/categories error:', err.message);
-    res.json(OFFICIAL_CATEGORIES.map(c => ({ ...c, productCount: 0, subcategories: [] })));
+    console.warn('[API] Falha no PostgreSQL em /api/categories, usando fallback do catálogo JSON:', err.message);
+    res.json(getMemoryCategories());
   }
 });
 
@@ -632,61 +654,47 @@ app.post('/api/admin/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Email e senha obrigatórios' });
 
+  const normEmail = (email || '').trim().toLowerCase();
   const db = getPool();
 
-  const checkEnvOrDemoAuth = async () => {
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@lnsports.com';
-    const adminHash = process.env.ADMIN_PASSWORD_HASH;
-
-    if (adminHash && email.toLowerCase() === adminEmail.toLowerCase()) {
-      const match = await bcrypt.compare(password, adminHash).catch(() => false);
-      if (match) {
-        const token = jwt.sign({ email: adminEmail, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
-        return { token, email: adminEmail };
+  // 1. Tenta autenticar pelo banco se o DB estiver conectado
+  if (db && isDbConnected) {
+    try {
+      const { rows } = await db.query('SELECT * FROM admins WHERE lower(email) = lower($1) LIMIT 1', [normEmail]);
+      if (rows.length) {
+        const admin = rows[0];
+        const valid = await bcrypt.compare(password, admin.password_hash);
+        if (valid) {
+          const token = jwt.sign({ id: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
+          return res.json({ token, email: admin.email });
+        }
       }
+    } catch (err) {
+      console.warn('[API] Falha ao consultar admin no DB, tentando variáveis de ambiente:', err.message);
     }
-
-    if (email.toLowerCase().includes('admin') && password.length >= 6) {
-      const token = jwt.sign({ email, role: 'admin', demo: true }, JWT_SECRET, { expiresIn: '8h' });
-      return { token, email, demo: true };
-    }
-    return null;
-  };
-
-  if (!db) {
-    const authResult = await checkEnvOrDemoAuth();
-    if (authResult) return res.json(authResult);
-    return res.status(401).json({ error: 'Credenciais inválidas' });
   }
 
-  try {
-    const { rows } = await db.query('SELECT * FROM admins WHERE email = $1 LIMIT 1', [email]);
-    if (rows.length) {
-      const admin = rows[0];
-      const valid = await bcrypt.compare(password, admin.password_hash);
-      if (valid) {
-        const token = jwt.sign({ id: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
-        return res.json({ token, email: admin.email });
-      }
-    }
-    const envAuth = await checkEnvOrDemoAuth();
-    if (envAuth) return res.json(envAuth);
+  // 2. Valida com a variável de ambiente segura (bcrypt hash)
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const adminHash = process.env.ADMIN_PASSWORD_HASH;
 
-    return res.status(401).json({ error: 'Credenciais inválidas' });
-  } catch (err) {
-    console.error('[API] POST /api/admin/login error:', err.message);
-    const envAuth = await checkEnvOrDemoAuth();
-    if (envAuth) return res.json(envAuth);
-    res.status(500).json({ error: 'Erro interno' });
+  if (adminEmail && adminHash && normEmail === adminEmail) {
+    const match = await bcrypt.compare(password, adminHash).catch(() => false);
+    if (match) {
+      const token = jwt.sign({ email: process.env.ADMIN_EMAIL, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
+      return res.json({ token, email: process.env.ADMIN_EMAIL });
+    }
   }
+
+  return res.status(401).json({ error: 'Credenciais inválidas' });
 });
 
 // GET /api/admin/dashboard
 app.get('/api/admin/dashboard', requireAuth, async (req, res) => {
   const db = getPool();
-  if (!db) {
+  function getMemoryDashboard() {
     const list = getMemoryProducts();
-    return res.json({
+    return {
       total: list.length,
       published: list.filter(p => p.status === 'published').length,
       draft: list.filter(p => p.status === 'draft').length,
@@ -695,8 +703,13 @@ app.get('/api/admin/dashboard', requireAuth, async (req, res) => {
       categoriesCount: 8,
       withoutImages: list.filter(p => !p.images || !p.images.length).length,
       withoutDescription: list.filter(p => !p.description).length,
-    });
+    };
   }
+
+  if (!db || !isDbConnected) {
+    return res.json(getMemoryDashboard());
+  }
+
   try {
     const { rows } = await db.query(`
       SELECT
@@ -722,8 +735,8 @@ app.get('/api/admin/dashboard', requireAuth, async (req, res) => {
       withoutDescription: parseInt(r.without_description),
     });
   } catch (err) {
-    console.error('[API] GET /api/admin/dashboard error:', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    console.warn('[API] Falha no PostgreSQL em /api/admin/dashboard, usando fallback do catálogo JSON:', err.message);
+    res.json(getMemoryDashboard());
   }
 });
 
@@ -914,6 +927,6 @@ app.get('*', (req, res, next) => {
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Server listening on port ${PORT}`);
-    console.log(`🗄️  PostgreSQL: ${process.env.DATABASE_URL ? '✅ conectado' : '⚠️  sem DATABASE_URL (modo sem DB)'}`);
+    console.log(`🗄️  PostgreSQL: ${isDbConnected ? '✅ Conectado como banco principal' : '⚠️  DATABASE_URL não configurada ou inacessível — catálogo JSON ativo em fallback'}`);
   });
 });
