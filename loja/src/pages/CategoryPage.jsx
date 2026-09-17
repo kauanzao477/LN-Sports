@@ -13,7 +13,6 @@ export function CategoryPage() {
   const [category, setCategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -26,8 +25,7 @@ export function CategoryPage() {
       setCategory(found || { name: slug.replace(/-/g, ' ').toUpperCase(), slug });
     }
     loadCat();
-    // Ao trocar de categoria, reseta estado
-    setSelectedSubcategory(null);
+    // Ao trocar de categoria, reseta página
     setCurrentPage(1);
   }, [slug]);
 
@@ -45,7 +43,6 @@ export function CategoryPage() {
         const result = await productService.getProducts({
           status: 'all',
           category: category.name,
-          subcategory: selectedSubcategory || null,
           sortBy,
           page: currentPage,
           limitCount: PRODUCTS_PER_PAGE,
@@ -72,12 +69,12 @@ export function CategoryPage() {
 
     loadPage();
     return () => { cancelled = true; };
-  }, [category, selectedSubcategory, sortBy, currentPage]);
+  }, [category, sortBy, currentPage]);
 
-  // Reset page when subcategory or sort changes
+  // Reset page when sort changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSubcategory, sortBy]);
+  }, [sortBy]);
 
   const goToPage = (page) => {
     if (page < 1 || page > totalPages) return;
@@ -121,12 +118,6 @@ export function CategoryPage() {
           <Link to="/" className="hover:text-white transition-colors">Início</Link>
           <ChevronRight className="w-3.5 h-3.5" />
           <span className="text-white font-medium">{category?.name || 'Categoria'}</span>
-          {selectedSubcategory && (
-            <>
-              <ChevronRight className="w-3.5 h-3.5" />
-              <span className="text-brand-purpleLight font-bold">{selectedSubcategory}</span>
-            </>
-          )}
         </nav>
 
         {/* Título e Controles */}
@@ -156,35 +147,6 @@ export function CategoryPage() {
             </select>
           </div>
         </div>
-
-        {/* Subcategory filter – shown for categories except Camisetas de Time and Camisetas de Time Retrô */}
-        {!(category?.slug === 'camisetas-de-time' || category?.slug === 'camisetas-de-time-retro') && category?.subcategories && category.subcategories.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-3 lg:pb-4 lg:mb-6 scrollbar-none">
-            <button
-              onClick={() => setSelectedSubcategory(null)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-all ${
-                selectedSubcategory === null
-                  ? 'bg-brand-purple text-white shadow-purple-glow'
-                  : 'bg-brand-surface text-slate-300 hover:text-white hover:bg-brand-card border border-brand-border'
-              }`}
-            >
-              Todos
-            </button>
-            {category.subcategories.map((sub) => (
-              <button
-                key={sub}
-                onClick={() => setSelectedSubcategory(sub === selectedSubcategory ? null : sub)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition-all ${
-                  selectedSubcategory === sub
-                    ? 'bg-brand-purple text-white shadow-purple-glow'
-                    : 'bg-brand-surface text-slate-300 hover:text-white hover:bg-brand-card border border-brand-border'
-                }`}
-              >
-                {sub}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Conditionally render conversion info or product grid */}
         {category?.slug === 'tabela-de-conversao-br-x-eur' ? (

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
 
 const { Pool } = pg;
 const __filename = fileURLToPath(import.meta.url);
@@ -13,16 +14,135 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+function normalizeCategory(cat = '', url = '') {
+  if (url.includes('lvguccinike.x.yupoo.com') || url.includes('ywq2000.x.yupoo.com')) return 'Chuteiras';
+  if (url.includes('mzrycm102618.x.yupoo.com') && url.includes('/4742786')) return 'Chuteiras Infantil';
+  if (cat.startsWith('Catálogo de Chuteiras - 0') || cat.startsWith('Catalogo de Chuteiras - 0')) return 'Chuteiras';
+  if (cat === 'Catálogo de Chuteiras - Infantil' || cat.includes('Infantil')) return 'Chuteiras Infantil';
+  if (cat.toLowerCase().startsWith('tênis casuais') || cat.toLowerCase().startsWith('tenis casuais')) return 'Tênis Casuais';
+  if (cat.toLowerCase().startsWith('tênis esportivos') || cat.toLowerCase().startsWith('tenis esportivos')) return 'Tênis Esportivos';
+  return cat;
+}
+
+// In-memory catalog fallback quando DATABASE_URL não estiver configurada
+let memoryProducts = null;
+function getMemoryProducts() {
+  if (!memoryProducts) {
+    const candidatePaths = [
+      path.resolve(__dirname, 'src', 'data', 'produtos.json'),
+      path.resolve(__dirname, 'public', 'data', 'produtos.json'),
+      path.resolve(__dirname, 'dist', 'data', 'produtos.json'),
+      path.resolve(__dirname, 'dist', 'produtos.json'),
+    ];
+    for (const p of candidatePaths) {
+      if (fs.existsSync(p)) {
+        try {
+          const list = JSON.parse(fs.readFileSync(p, 'utf-8'));
+          if (Array.isArray(list) && list.length > 0) {
+            memoryProducts = list.map((item, idx) => ({
+              id: item.id || String(idx + 1),
+              name: item.name || '',
+              slug: item.slug || (item.name ? item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : `prod-${idx}`),
+              category: normalizeCategory(item.category || '', item.sourceUrl || ''),
+              originalCategory: item.originalCategory || item.category || '',
+              subcategory: item.subcategory || '',
+              images: Array.isArray(item.images) ? item.images : [],
+              sourceUrl: item.sourceUrl || '',
+              sourceProvider: item.sourceProvider || 'yupoo',
+              description: item.description || '',
+              published: item.published !== false,
+              featured: !!item.featured,
+              status: item.status || 'published',
+              mainImageIndex: item.mainImageIndex || 0,
+              createdAt: item.createdAt || new Date(Date.now() - idx * 1000).toISOString(),
+              updatedAt: item.updatedAt || new Date().toISOString()
+            }));
+            console.log(`[MemoryCatalog] Carregados ${memoryProducts.length} produtos em memória para fallback resiliente.`);
+            break;
+          }
+        } catch (err) {
+          console.error('[MemoryCatalog] Erro ao carregar produtos.json:', err.message);
+        }
+      }
+    }
+  }
+  return memoryProducts || [];
+}
+
+// Função de busca e paginação em memória (fallback idêntico ao PostgreSQL)
+function queryMemoryProducts(req) {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 24));
+  const offset = (page - 1) * limit;
+  const category = req.query.category || null;
+  const subcategory = req.query.subcategory || null;
+  const status = req.query.status || null;
+  const search = req.query.search ? req.query.search.toLowerCase().trim() : null;
+  const sort = req.query.sort || 'newest';
+  const featured = req.query.featured !== undefined ? req.query.featured === 'true' : null;
+
+  let list = getMemoryProducts();
+
+  if (status && status !== 'all') {
+    list = list.filter(p => p.status === status);
+  }
+  if (category) {
+    const catNorm = category.toLowerCase().trim();
+    list = list.filter(p => {
+      const pCat = (p.category || '').toLowerCase();
+      if (catNorm === 'tênis casuais' || catNorm === 'tenis casuais' || catNorm === 'tenis-casuais') {
+        return pCat.startsWith('tênis casuais') || pCat.startsWith('tenis casuais');
+      }
+      if (catNorm === 'tênis esportivos' || catNorm === 'tenis esportivos' || catNorm === 'tenis-esportivos') {
+        return pCat.startsWith('tênis esportivos') || pCat.startsWith('tenis esportivos');
+      }
+      return pCat === catNorm || pCat.replace(/[^a-z0-9]+/g, '-') === catNorm;
+    });
+  }
+  if (subcategory) {
+    const subNorm = subcategory.toLowerCase().trim();
+    list = list.filter(p => (p.subcategory || '').toLowerCase() === subNorm);
+  }
+  if (featured !== null) {
+    list = list.filter(p => p.featured === featured);
+  }
+  if (search) {
+    list = list.filter(p =>
+      p.name.toLowerCase().includes(search) ||
+      (p.category || '').toLowerCase().includes(search) ||
+      (p.subcategory || '').toLowerCase().includes(search)
+    );
+  }
+
+  if (sort === 'name-asc') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  else if (sort === 'name-desc') list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+  else if (sort === 'featured') list = [...list].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+
+  const total = list.length;
+  const sliced = list.slice(offset, offset + limit);
+
+  return {
+    data: sliced,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+    limit,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PostgreSQL Pool
 // ─────────────────────────────────────────────────────────────────────────────
 let pool = null;
+let isDbConnected = false;
 
 function getPool() {
-  if (!pool && process.env.DATABASE_URL) {
+  const dbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : '';
+  if (!pool && dbUrl) {
+    const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
+      connectionString: dbUrl,
+      ssl: isLocal ? false : { rejectUnauthorized: false },
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -35,15 +155,25 @@ function getPool() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DDL — Criação das tabelas (idempotente)
+// DDL — Criação das tabelas e teste de conexão (idempotente)
 // ─────────────────────────────────────────────────────────────────────────────
 async function initDB() {
-  const db = getPool();
-  if (!db) {
-    console.warn('[DB] DATABASE_URL não definida — rodando sem PostgreSQL.');
+  const dbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : '';
+  if (!dbUrl) {
+    console.warn('[DB] ℹ️ DATABASE_URL não configurada no ambiente. Aplicação operando com catálogo JSON em fallback.');
     return;
   }
+
+  const db = getPool();
+  if (!db) return;
+
   try {
+    // Testa conectividade primeiro
+    const client = await db.connect();
+    client.release();
+    isDbConnected = true;
+    console.log('[DB] ✅ Conexão PostgreSQL estabelecida com sucesso.');
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS products (
         id                SERIAL PRIMARY KEY,
@@ -77,7 +207,7 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS store_settings (
         id                       SERIAL PRIMARY KEY,
         store_name               TEXT    DEFAULT 'LN SPORTS',
-        whatsapp_number          TEXT    DEFAULT '5511999999999',
+        whatsapp_number          TEXT    DEFAULT '5549998046866',
         whatsapp_enabled         BOOLEAN DEFAULT true,
         default_message          TEXT    DEFAULT '',
         product_message_template TEXT    DEFAULT '',
@@ -104,10 +234,11 @@ async function initDB() {
         VALUES ($1, $2)
         ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
       `, [process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD_HASH]);
-      console.log('[DB] Admin seed aplicado.');
+      console.log('[DB] Admin seed aplicado no PostgreSQL.');
     }
   } catch (err) {
-    console.error('[DB] Erro ao inicializar schema:', err.message);
+    isDbConnected = false;
+    console.warn(`[DB] ⚠️ Falha ao conectar ao PostgreSQL (${err.message}). Mantendo fallback do catálogo JSON.`);
   }
 }
 
@@ -198,11 +329,11 @@ app.get('/api/image-proxy', imageProxyHandler);
 // PUBLIC API
 // ─────────────────────────────────────────────────────────────────────────────
 
-// GET /api/products
-// Query params: page, limit, category, subcategory, status, search, sort, featured
 app.get('/api/products', async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  if (!db || !isDbConnected) {
+    return res.json(queryMemoryProducts(req));
+  }
 
   try {
     const page     = Math.max(1, parseInt(req.query.page)  || 1);
@@ -225,8 +356,15 @@ app.get('/api/products', async (req, res) => {
       params.push(status);
     }
     if (category) {
-      conditions.push(`lower(category) = lower($${pi++})`);
-      params.push(category);
+      const catLower = category.toLowerCase().trim();
+      if (catLower === 'tênis casuais' || catLower === 'tenis casuais' || catLower === 'tenis-casuais') {
+        conditions.push(`(lower(category) = 'tênis casuais' OR lower(category) = 'tenis casuais' OR lower(category) LIKE 'tênis casuais%' OR lower(category) LIKE 'tenis casuais%')`);
+      } else if (catLower === 'tênis esportivos' || catLower === 'tenis esportivos' || catLower === 'tenis-esportivos') {
+        conditions.push(`(lower(category) = 'tênis esportivos' OR lower(category) = 'tenis esportivos' OR lower(category) LIKE 'tênis esportivos%' OR lower(category) LIKE 'tenis esportivos%')`);
+      } else {
+        conditions.push(`lower(category) = lower($${pi++})`);
+        params.push(category);
+      }
     }
     if (subcategory) {
       conditions.push(`lower(subcategory) = lower($${pi++})`);
@@ -268,33 +406,51 @@ app.get('/api/products', async (req, res) => {
       limit,
     });
   } catch (err) {
-    console.error('[API] GET /api/products error:', err.message);
-    res.status(500).json({ error: 'Erro interno ao buscar produtos' });
+    console.warn('[API] Falha no PostgreSQL em /api/products, usando fallback do catálogo JSON:', err.message);
+    return res.json(queryMemoryProducts(req));
   }
 });
 
-// GET /api/products/:slug
 app.get('/api/products/:slug', async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  if (!db || !isDbConnected) {
+    const list = getMemoryProducts();
+    const product = list.find(p => p.slug === req.params.slug || (p.sourceUrl && p.sourceUrl.includes(req.params.slug)));
+    if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
+    return res.json(product);
+  }
 
   try {
     const { rows } = await db.query(
       'SELECT * FROM products WHERE slug = $1 LIMIT 1',
       [req.params.slug]
     );
-    if (!rows.length) return res.status(404).json({ error: 'Produto não encontrado' });
+    if (!rows.length) {
+      const list = getMemoryProducts();
+      const product = list.find(p => p.slug === req.params.slug || (p.sourceUrl && p.sourceUrl.includes(req.params.slug)));
+      if (product) return res.json(product);
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
     res.json(rowToProduct(rows[0]));
   } catch (err) {
-    console.error('[API] GET /api/products/:slug error:', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    console.warn('[API] Falha no PostgreSQL em /api/products/:slug, usando fallback em memória:', err.message);
+    const list = getMemoryProducts();
+    const product = list.find(p => p.slug === req.params.slug || (p.sourceUrl && p.sourceUrl.includes(req.params.slug)));
+    if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
+    return res.json(product);
   }
 });
 
-// GET /api/products/:slug/related
 app.get('/api/products/:slug/related', async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  if (!db || !isDbConnected) {
+    const list = getMemoryProducts();
+    const product = list.find(p => p.slug === req.params.slug);
+    if (!product) return res.json([]);
+    const limit = Math.min(12, parseInt(req.query.limit) || 4);
+    const related = list.filter(p => p.category === product.category && p.slug !== product.slug).slice(0, limit);
+    return res.json(related);
+  }
 
   try {
     const product = (await db.query('SELECT * FROM products WHERE slug = $1 LIMIT 1', [req.params.slug])).rows[0];
@@ -306,8 +462,13 @@ app.get('/api/products/:slug/related', async (req, res) => {
     );
     res.json(rows.map(rowToProduct));
   } catch (err) {
-    console.error('[API] GET /api/products/:slug/related error:', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    console.warn('[API] Falha no PostgreSQL em /api/products/:slug/related, usando fallback em memória:', err.message);
+    const list = getMemoryProducts();
+    const product = list.find(p => p.slug === req.params.slug);
+    if (!product) return res.json([]);
+    const limit = Math.min(12, parseInt(req.query.limit) || 4);
+    const related = list.filter(p => p.category === product.category && p.slug !== product.slug).slice(0, limit);
+    return res.json(related);
   }
 });
 
@@ -317,21 +478,43 @@ app.get('/api/categories', async (req, res) => {
   const db = getPool();
 
   const OFFICIAL_CATEGORIES = [
+    { id: 'camisetas-de-time',          name: 'Camisetas de Time',                   slug: 'camisetas-de-time' },
     { id: 'camisetas-de-time-retro',    name: 'Camisetas de Time Retrô',            slug: 'camisetas-de-time-retro' },
-    { id: 'sapatilhas-de-atletismo',    name: 'Sapatilhas de Atletismo',             slug: 'sapatilhas-de-atletismo' },
     { id: 'chuteiras',                  name: 'Chuteiras',                           slug: 'chuteiras' },
     { id: 'chuteiras-infantil',         name: 'Chuteiras Infantil',                  slug: 'chuteiras-infantil' },
-    { id: 'tabela-de-conversao-br-x-eur', name: 'Tabela de Conversão BR x EUR',     slug: 'tabela-de-conversao-br-x-eur' },
-    { id: 'camisetas-de-time',          name: 'Camisetas de Time',                   slug: 'camisetas-de-time' },
-    { id: 'tenis-de-corrida',           name: 'Tênis de Corrida',                    slug: 'tenis-de-corrida' },
-    { id: 'tenis-esportivo',            name: 'Tênis Esportivo',                     slug: 'tenis-esportivo' },
+    { id: 'sapatilhas-de-atletismo',    name: 'Sapatilhas de Atletismo',             slug: 'sapatilhas-de-atletismo' },
+    { id: 'tenis-casuais',              name: 'Tênis Casuais',                      slug: 'tenis-casuais' },
     { id: 'tenis-on-running-e-hoka',    name: 'Tênis On Running e HOKA',             slug: 'tenis-on-running-e-hoka' },
-    { id: 'tenis-casuais-senha-hjh001077',  name: 'Tênis Casuais',                      slug: 'tenis-casuais-senha-hjh001077' },
-    { id: 'tenis-esportivos-senha-888888',  name: 'Tênis Esportivos',                    slug: 'tenis-esportivos-senha-888888' },
+    { id: 'tenis-esportivos',           name: 'Tênis Esportivos',                    slug: 'tenis-esportivos' },
   ];
 
-  if (!db) {
-    return res.json(OFFICIAL_CATEGORIES.map(c => ({ ...c, productCount: 0, subcategories: [] })));
+  // Aliases: nome no DB (lower) -> nome oficial da categoria
+  const CATEGORY_DB_ALIASES = {
+    'tênis casuais - senha: hjh001077': 'Tênis Casuais',
+    'tênis esportivos - senha: 888888':  'Tênis Esportivos',
+  };
+
+  function getMemoryCategories() {
+    const list = getMemoryProducts();
+    const countMap = {};
+    for (const p of list) {
+      let cat = (p.category || '').toLowerCase();
+      if (cat.startsWith('tênis casuais') || cat.startsWith('tenis casuais')) cat = 'tênis casuais';
+      else if (cat.startsWith('tênis esportivos') || cat.startsWith('tenis esportivos')) cat = 'tênis esportivos';
+      countMap[cat] = (countMap[cat] || 0) + 1;
+    }
+    return OFFICIAL_CATEGORIES.map(c => {
+      const key = c.name.toLowerCase();
+      return {
+        ...c,
+        productCount: countMap[key] || 0,
+        subcategories: [],
+      };
+    });
+  }
+
+  if (!db || !isDbConnected) {
+    return res.json(getMemoryCategories());
   }
 
   try {
@@ -340,16 +523,11 @@ app.get('/api/categories', async (req, res) => {
       `SELECT lower(category) as cat, COUNT(*) as cnt FROM products GROUP BY lower(category)`
     );
     const countMap = {};
-    for (const r of countResult.rows) countMap[r.cat] = parseInt(r.cnt);
-
-    // Subcategorias por categoria
-    const subResult = await db.query(
-      `SELECT lower(category) as cat, subcategory FROM products WHERE subcategory IS NOT NULL AND subcategory != '' GROUP BY lower(category), subcategory ORDER BY subcategory`
-    );
-    const subMap = {};
-    for (const r of subResult.rows) {
-      if (!subMap[r.cat]) subMap[r.cat] = new Set();
-      subMap[r.cat].add(r.subcategory);
+    for (const r of countResult.rows) {
+      // Remapeia aliases (categorias com senha) para o nome público
+      const publicName = CATEGORY_DB_ALIASES[r.cat] || null;
+      const key = publicName ? publicName.toLowerCase() : r.cat;
+      countMap[key] = (countMap[key] || 0) + parseInt(r.cnt);
     }
 
     const categories = OFFICIAL_CATEGORIES.map(cat => {
@@ -357,14 +535,14 @@ app.get('/api/categories', async (req, res) => {
       return {
         ...cat,
         productCount: countMap[key] || 0,
-        subcategories: subMap[key] ? Array.from(subMap[key]).sort() : [],
+        subcategories: [],
       };
     });
 
     res.json(categories);
   } catch (err) {
-    console.error('[API] GET /api/categories error:', err.message);
-    res.json(OFFICIAL_CATEGORIES.map(c => ({ ...c, productCount: 0, subcategories: [] })));
+    console.warn('[API] Falha no PostgreSQL em /api/categories, usando fallback do catálogo JSON:', err.message);
+    res.json(getMemoryCategories());
   }
 });
 
@@ -373,11 +551,11 @@ app.get('/api/settings', async (req, res) => {
   const db = getPool();
   const DEFAULT = {
     storeName: process.env.VITE_STORE_NAME || 'LN SPORTS',
-    whatsappNumber: process.env.VITE_STORE_WHATSAPP_NUMBER || '5511999999999',
+    whatsappNumber: process.env.VITE_STORE_WHATSAPP_NUMBER || '5549998046866',
     whatsappEnabled: true,
     defaultMessage: 'Olá! Gostaria de falar com um atendente da LN SPORTS.',
     productMessageTemplate: 'Olá! Tenho interesse neste produto:\nProduto: {productName}\nLink: {productUrl}\nGostaria de saber mais informações com um atendente.',
-    instagramUrl: 'https://instagram.com/lnsports',
+    instagramUrl: process.env.VITE_STORE_INSTAGRAM_URL || 'https://www.instagram.com/ln.sportsss/',
     announcementText: '🚀 Catálogo Oficial LN SPORTS — Envio para todo o Brasil via Atendimento Exclusivo no WhatsApp',
   };
   if (!db) return res.json(DEFAULT);
@@ -400,6 +578,73 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
+// GET /api/image-proxy — Proxy de imagens Yupoo com suporte a bypass de hotlinking e cache
+app.get('/api/image-proxy', async (req, res) => {
+  const targetUrl = req.query.url;
+  if (!targetUrl) return res.status(400).send('Missing url parameter');
+
+  let targetParsed;
+  try {
+    targetParsed = new URL(targetUrl);
+  } catch {
+    return res.status(400).send('Invalid url parameter');
+  }
+
+  if (!targetParsed.hostname.includes('yupoo.com')) {
+    return res.status(403).send('Only yupoo.com images are allowed');
+  }
+
+  const pathParts = targetParsed.pathname.split('/').filter(Boolean);
+  const account = pathParts[0] || 'minkang';
+  const referer = `https://${account}.x.yupoo.com/`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const upstream = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: {
+        'Referer': referer,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+      }
+    });
+    clearTimeout(timeout);
+
+    if (!upstream.ok) {
+      // Tenta novamente com referer genérico
+      const retryUpstream = await fetch(targetUrl, {
+        headers: {
+          'Referer': 'https://x.yupoo.com/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'image/*,*/*;q=0.8'
+        }
+      });
+      if (retryUpstream.ok) {
+        const contentType = retryUpstream.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+        const buf = Buffer.from(await retryUpstream.arrayBuffer());
+        res.setHeader('Content-Length', buf.length);
+        return res.end(buf);
+      }
+      return res.status(upstream.status).send(`Upstream error: ${upstream.status}`);
+    }
+
+    const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    const arrayBuffer = await upstream.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
+  } catch (err) {
+    console.error('[Image Proxy Error]:', err.message);
+    res.status(500).send('Failed to proxy image');
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN API (protegida por JWT)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -409,35 +654,62 @@ app.post('/api/admin/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Email e senha obrigatórios' });
 
+  const normEmail = (email || '').trim().toLowerCase();
   const db = getPool();
 
-  // Fallback demo quando DB não configurado
-  if (!db) {
-    if (email.toLowerCase().includes('admin') && password.length >= 6) {
-      const token = jwt.sign({ email, role: 'admin', demo: true }, JWT_SECRET, { expiresIn: '8h' });
-      return res.json({ token, email, demo: true });
+  // 1. Tenta autenticar pelo banco se o DB estiver conectado
+  if (db && isDbConnected) {
+    try {
+      const { rows } = await db.query('SELECT * FROM admins WHERE lower(email) = lower($1) LIMIT 1', [normEmail]);
+      if (rows.length) {
+        const admin = rows[0];
+        const valid = await bcrypt.compare(password, admin.password_hash);
+        if (valid) {
+          const token = jwt.sign({ id: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
+          return res.json({ token, email: admin.email });
+        }
+      }
+    } catch (err) {
+      console.warn('[API] Falha ao consultar admin no DB, tentando variáveis de ambiente:', err.message);
     }
-    return res.status(401).json({ error: 'Credenciais inválidas' });
   }
 
-  try {
-    const { rows } = await db.query('SELECT * FROM admins WHERE email = $1 LIMIT 1', [email]);
-    if (!rows.length) return res.status(401).json({ error: 'Credenciais inválidas' });
-    const admin = rows[0];
-    const valid = await bcrypt.compare(password, admin.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Credenciais inválidas' });
-    const token = jwt.sign({ id: admin.id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
-    res.json({ token, email: admin.email });
-  } catch (err) {
-    console.error('[API] POST /api/admin/login error:', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+  // 2. Valida com a variável de ambiente segura (bcrypt hash)
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const adminHash = process.env.ADMIN_PASSWORD_HASH;
+
+  if (adminEmail && adminHash && normEmail === adminEmail) {
+    const match = await bcrypt.compare(password, adminHash).catch(() => false);
+    if (match) {
+      const token = jwt.sign({ email: process.env.ADMIN_EMAIL, role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
+      return res.json({ token, email: process.env.ADMIN_EMAIL });
+    }
   }
+
+  return res.status(401).json({ error: 'Credenciais inválidas' });
 });
 
 // GET /api/admin/dashboard
 app.get('/api/admin/dashboard', requireAuth, async (req, res) => {
   const db = getPool();
-  if (!db) return res.status(503).json({ error: 'Banco não configurado' });
+  function getMemoryDashboard() {
+    const list = getMemoryProducts();
+    return {
+      total: list.length,
+      published: list.filter(p => p.status === 'published').length,
+      draft: list.filter(p => p.status === 'draft').length,
+      inactive: list.filter(p => p.status === 'inactive').length,
+      featured: list.filter(p => p.featured).length,
+      categoriesCount: 8,
+      withoutImages: list.filter(p => !p.images || !p.images.length).length,
+      withoutDescription: list.filter(p => !p.description).length,
+    };
+  }
+
+  if (!db || !isDbConnected) {
+    return res.json(getMemoryDashboard());
+  }
+
   try {
     const { rows } = await db.query(`
       SELECT
@@ -463,8 +735,8 @@ app.get('/api/admin/dashboard', requireAuth, async (req, res) => {
       withoutDescription: parseInt(r.without_description),
     });
   } catch (err) {
-    console.error('[API] GET /api/admin/dashboard error:', err.message);
-    res.status(500).json({ error: 'Erro interno' });
+    console.warn('[API] Falha no PostgreSQL em /api/admin/dashboard, usando fallback do catálogo JSON:', err.message);
+    res.json(getMemoryDashboard());
   }
 });
 
@@ -563,6 +835,51 @@ app.patch('/api/admin/products/:id/main-image', requireAuth, async (req, res) =>
   }
 });
 
+// PATCH /api/admin/products/:id/cover — Definir imagem existente como capa (images[0])
+app.patch('/api/admin/products/:id/cover', requireAuth, async (req, res) => {
+  const db = getPool();
+  if (!db) {
+    const list = getMemoryProducts();
+    const prod = list.find(p => String(p.id) === String(req.params.id) || p.slug === req.params.id);
+    if (!prod) return res.status(404).json({ error: 'Produto não encontrado' });
+    const { images, coverIndex } = req.body || {};
+    if (images && Array.isArray(images)) {
+      prod.images = images;
+    } else if (coverIndex !== undefined && Array.isArray(prod.images) && prod.images[coverIndex]) {
+      const chosen = prod.images[coverIndex];
+      prod.images = [chosen, ...prod.images.filter((_, i) => i !== coverIndex)];
+    }
+    prod.mainImageIndex = 0;
+    return res.json(prod);
+  }
+  try {
+    const { images, coverIndex } = req.body || {};
+    let newImages = images;
+
+    if (!newImages && coverIndex !== undefined) {
+      const current = await db.query('SELECT images FROM products WHERE id = $1', [req.params.id]);
+      if (current.rows.length) {
+        const raw = current.rows[0].images || [];
+        const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (Array.isArray(arr) && arr[coverIndex]) {
+          const chosen = arr[coverIndex];
+          newImages = [chosen, ...arr.filter((_, i) => i !== coverIndex)];
+        }
+      }
+    }
+
+    const { rows } = await db.query(
+      `UPDATE products SET images = COALESCE($1, images), main_image_index = 0, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [newImages ? JSON.stringify(newImages) : null, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Produto não encontrado' });
+    res.json(rowToProduct(rows[0]));
+  } catch (err) {
+    console.error('[API] PATCH .../cover error:', err.message);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // PUT /api/admin/settings — Salvar configurações da loja
 app.put('/api/admin/settings', requireAuth, async (req, res) => {
   const db = getPool();
@@ -588,6 +905,12 @@ app.put('/api/admin/settings', requireAuth, async (req, res) => {
   }
 });
 
+// PUT /api/admin/categories — Salvar/atualizar dados da categoria (idempotente)
+app.put('/api/admin/categories', requireAuth, async (req, res) => {
+  const { name, slug, subcategories, productCount } = req.body || {};
+  res.json({ ok: true, name, slug, subcategories, productCount });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Static + SPA Fallback
 // ─────────────────────────────────────────────────────────────────────────────
@@ -604,6 +927,6 @@ app.get('*', (req, res, next) => {
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Server listening on port ${PORT}`);
-    console.log(`🗄️  PostgreSQL: ${process.env.DATABASE_URL ? '✅ conectado' : '⚠️  sem DATABASE_URL (modo sem DB)'}`);
+    console.log(`🗄️  PostgreSQL: ${isDbConnected ? '✅ Conectado como banco principal' : '⚠️  DATABASE_URL não configurada ou inacessível — catálogo JSON ativo em fallback'}`);
   });
 });

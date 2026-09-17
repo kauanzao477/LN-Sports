@@ -80,7 +80,7 @@ export function AdminLoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@lnsports.com"
+                  placeholder="lourenzo.brando@lnsports.com.br"
                   className="w-full bg-brand-surface border border-brand-border text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple"
                 />
               </div>

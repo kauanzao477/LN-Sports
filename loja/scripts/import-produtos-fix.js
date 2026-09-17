@@ -67,7 +67,7 @@ async function ensureSchema(client) {
     CREATE TABLE IF NOT EXISTS store_settings (
       id                       SERIAL PRIMARY KEY,
       store_name               TEXT    DEFAULT 'LN SPORTS',
-      whatsapp_number          TEXT    DEFAULT '5511999999999',
+      whatsapp_number          TEXT    DEFAULT '5549998046866',
       whatsapp_enabled         BOOLEAN DEFAULT true,
       default_message          TEXT    DEFAULT '',
       product_message_template TEXT    DEFAULT '',

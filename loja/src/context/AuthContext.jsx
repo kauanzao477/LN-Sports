@@ -44,34 +44,36 @@ export function AuthProvider({ children }) {
 
   /**
    * Login via POST /api/admin/login.
-   * Em modo demo (sem DB configurado), aceita qualquer email com "admin" e senha ≥6 chars.
+   * A validação de credenciais ocorre exclusivamente no backend via hash bcrypt.
    */
   const login = async (email, password) => {
-    const res = await fetch('/api/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: (email || '').trim(), password }),
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Erro de autenticação' }));
-      throw new Error(err.error || 'Credenciais inválidas');
+      if (res.ok) {
+        const { token, email: adminEmail } = await res.json();
+        const userObj = {
+          uid: 'admin',
+          email: adminEmail || email,
+          displayName: 'Administrador LN SPORTS',
+        };
+
+        sessionStorage.setItem(SESSION_KEY, token);
+        sessionStorage.setItem(USER_KEY, JSON.stringify(userObj));
+        setUser(userObj);
+        setIsAdmin(true);
+        return userObj;
+      }
+
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Credenciais inválidas. Verifique o e-mail e a senha informados.');
+    } catch (e) {
+      throw new Error(e.message || 'Erro ao comunicar com o servidor de autenticação.');
     }
-
-    const { token, email: adminEmail, demo } = await res.json();
-
-    const userObj = {
-      uid: 'admin',
-      email: adminEmail,
-      displayName: 'Administrador LN SPORTS',
-      demo: !!demo,
-    };
-
-    sessionStorage.setItem(SESSION_KEY, token);
-    sessionStorage.setItem(USER_KEY, JSON.stringify(userObj));
-    setUser(userObj);
-    setIsAdmin(true);
-    return userObj;
   };
 
   const logout = () => {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, ShieldCheck, Heart } from 'lucide-react';
+import { MessageCircle, ShieldCheck, Heart, Instagram } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { WhatsAppButton } from './WhatsAppButton';
 
@@ -45,6 +45,15 @@ export function Footer() {
             <p className="text-xs leading-relaxed text-brand-muted">
               Plataforma de catálogo esportivo da LN SPORTS. Seleção exclusiva de camisas de futebol, retro, seleções e kits esportivos em alta qualidade.
             </p>
+            <a
+              href={settings?.instagramUrl || 'https://www.instagram.com/ln.sportsss/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-pink-400 transition-colors"
+            >
+              <Instagram className="w-4 h-4 text-pink-400" />
+              <span>@ln.sportsss</span>
+            </a>
           </div>
 
           {/* Coluna 2: Categorias */}

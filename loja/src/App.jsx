@@ -9,6 +9,10 @@ import { SearchPage } from './pages/SearchPage';
 
 // Admin
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import { AdminProductsPage } from './pages/admin/AdminProductsPage';
+import { AdminCategoriesPage } from './pages/admin/AdminCategoriesPage';
+import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 
@@ -30,13 +34,19 @@ export function App() {
             <Route path="/admin/login" element={<AdminLoginPage />} />
             {/* Protected admin area */}
             <Route
-              path="/admin/*"
+              path="/admin"
               element={
                 <ProtectedRoute>
                   <AdminLayout />
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route index element={<AdminDashboardPage />} />
+              <Route path="produtos" element={<AdminProductsPage />} />
+              <Route path="categorias" element={<AdminCategoriesPage />} />
+              <Route path="configuracoes" element={<AdminSettingsPage />} />
+              <Route path="*" element={<AdminDashboardPage />} />
+            </Route>
           </Routes>
         </Router>
       </StoreProvider>

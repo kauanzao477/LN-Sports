@@ -55,8 +55,14 @@ export function normalizeStr(str) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
+// Mapa de aliases internos -> nome público (sem expor senha)
+const CATEGORY_ALIASES = {
+  'Tênis Casuais - Senha: HJH001077': 'Tênis Casuais',
+  'Tênis Esportivos - Senha: 888888':  'Tênis Esportivos',
+};
+
 // Inferir categoria a partir do sourceUrl (preserva lógica original)
-function inferCategory(product) {
+export function inferCategory(product) {
   const url = product.sourceUrl || '';
   if (url.includes('lvguccinike.x.yupoo.com')) return 'Chuteiras';
   if (url.includes('ywq2000.x.yupoo.com')) return 'Chuteiras';
@@ -65,6 +71,8 @@ function inferCategory(product) {
       product.category === 'Catálogo de Chuteiras - 02' ||
       product.category === 'Catálogo de Chuteiras - 03') return 'Chuteiras';
   if (product.category === 'Catálogo de Chuteiras - Infantil') return 'Chuteiras Infantil';
+  // Mapeia categorias internas (com senha) para nomes públicos
+  if (CATEGORY_ALIASES[product.category]) return CATEGORY_ALIASES[product.category];
   return product.category;
 }
 
@@ -135,16 +143,25 @@ function apiUrl(path) {
 let liveProductsCache = INITIAL_DEMO_PRODUCTS;
 let lastFetchTimestamp = 0;
 
+let cachedMergedProducts = null;
+let lastSourceListRef = null;
+
 export async function fetchLatestLocalProducts() {
+  // Se já temos produtos carregados na memória, não refaz o download pesado de 62MB
+  if (liveProductsCache && liveProductsCache.length > 10) {
+    return liveProductsCache;
+  }
+
   const now = Date.now();
-  if (now - lastFetchTimestamp > 1200) {
+  if (now - lastFetchTimestamp > 60000) {
     lastFetchTimestamp = now;
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}data/produtos.json?t=${now}`);
+      const res = await fetch(`${import.meta.env.BASE_URL}data/produtos.json`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           liveProductsCache = data;
+          cachedMergedProducts = null; // invalida cache para reprocessar
         }
       }
     } catch (e) { /* silencioso */ }
@@ -153,6 +170,12 @@ export async function fetchLatestLocalProducts() {
 }
 
 function getLocalProducts() {
+  const sourceList = liveProductsCache?.length > 0 ? liveProductsCache : INITIAL_DEMO_PRODUCTS;
+
+  if (cachedMergedProducts && lastSourceListRef === sourceList) {
+    return cachedMergedProducts;
+  }
+
   let adminEdits = {};
   try {
     const saved = localStorage.getItem('ln_sports_admin_edits');
@@ -161,16 +184,16 @@ function getLocalProducts() {
 
   const merged = [];
   const seenUrls = new Set();
-  const sourceList = liveProductsCache?.length > 0 ? liveProductsCache : INITIAL_DEMO_PRODUCTS;
 
-  for (const imp of sourceList) {
+  for (let i = 0; i < sourceList.length; i++) {
+    const imp = sourceList[i];
     if (!imp?.sourceUrl) continue;
     if (seenUrls.has(imp.sourceUrl)) continue;
     seenUrls.add(imp.sourceUrl);
 
     const override = adminEdits[imp.sourceUrl] || adminEdits[imp.slug] || {};
     const product = {
-      id: imp.slug || slugify(imp.name),
+      id: imp.slug || imp.id || String(i),
       ...imp,
       ...override,
       published: imp.published !== false,
@@ -179,6 +202,9 @@ function getLocalProducts() {
     product.category = inferCategory(product);
     merged.push(product);
   }
+
+  lastSourceListRef = sourceList;
+  cachedMergedProducts = merged;
   return merged;
 }
 
@@ -251,7 +277,15 @@ export const productService = {
     if (category) {
       const catNorm = normalizeStr(category);
       const catSlug = slugify(category);
-      items = items.filter(p => p.category && (normalizeStr(p.category) === catNorm || slugify(p.category) === catSlug));
+      items = items.filter(p => {
+        if (!p.category) return false;
+        // Verifica correspondência direta
+        if (normalizeStr(p.category) === catNorm || slugify(p.category) === catSlug) return true;
+        // Verifica via alias (ex: 'Tênis Casuais - Senha: HJH001077' -> 'Tênis Casuais')
+        const mapped = CATEGORY_ALIASES[p.category];
+        if (mapped && (normalizeStr(mapped) === catNorm || slugify(mapped) === catSlug)) return true;
+        return false;
+      });
     }
     if (subcategory) {
       const subNorm = normalizeStr(subcategory);
@@ -399,6 +433,58 @@ export const productService = {
   },
 
   /**
+   * Define manualmente uma imagem existente como capa do produto (images[0]).
+   * A imagem escolhida passa para images[0], todas as outras permanecem e a ordem é persistida.
+   */
+  async setProductCover(product, selectedIndex) {
+    if (!product || !Array.isArray(product.images) || selectedIndex < 0 || selectedIndex >= product.images.length) {
+      return product;
+    }
+
+    const chosenImage = product.images[selectedIndex];
+    const otherImages = product.images.filter((_, idx) => idx !== selectedIndex);
+    const newImages = [chosenImage, ...otherImages];
+
+    // Persiste no localStorage para manter a seleção após recarregar a página
+    let adminEdits = {};
+    try {
+      const saved = localStorage.getItem('ln_sports_admin_edits');
+      if (saved) adminEdits = JSON.parse(saved);
+    } catch (e) {}
+
+    const key = product.sourceUrl || product.slug;
+    adminEdits[key] = {
+      ...(adminEdits[key] || {}),
+      images: newImages,
+      mainImageIndex: 0
+    };
+    localStorage.setItem('ln_sports_admin_edits', JSON.stringify(adminEdits));
+
+    // Atualiza imediatamente no cache em memória
+    if (Array.isArray(liveProductsCache)) {
+      const found = liveProductsCache.find(p => (p.sourceUrl && p.sourceUrl === product.sourceUrl) || (p.slug && p.slug === product.slug));
+      if (found) {
+        found.images = newImages;
+        found.mainImageIndex = 0;
+      }
+    }
+
+    // Se produto possuir ID cadastrado no backend, sincroniza via API
+    if (product.id) {
+      try {
+        await apiFetch(`/api/admin/products/${product.id}/cover`, {
+          method: 'PATCH',
+          body: JSON.stringify({ images: newImages, coverIndex: selectedIndex })
+        });
+      } catch (err) {
+        // Fallback local já gravado com sucesso
+      }
+    }
+
+    return { ...product, images: newImages, mainImageIndex: 0 };
+  },
+
+  /**
    * Salva índice da imagem principal (admin).
    */
   async saveMainImageIndex(productSourceUrl, productSlug, index) {
@@ -412,8 +498,6 @@ export const productService = {
     adminEdits[key] = { ...(adminEdits[key] || {}), mainImageIndex: index };
     localStorage.setItem('ln_sports_admin_edits', JSON.stringify(adminEdits));
 
-    // Persiste no banco via API se tivermos o id
-    // (a chamada é feita pelo componente que conhece o id)
     return index;
   },
 

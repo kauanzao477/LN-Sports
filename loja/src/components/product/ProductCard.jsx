@@ -47,12 +47,6 @@ export function ProductCard({ product }) {
 
       {/* Informações do Produto */}
       <div className="mt-3 flex-1 flex flex-col">
-        {product.subcategory && (
-          <span className="text-[11px] font-semibold text-brand-purpleLight tracking-wide mb-1">
-            {product.subcategory}
-          </span>
-        )}
-        
         <Link
           to={`/produto/${product.slug}`}
           className="font-display font-bold text-sm text-white line-clamp-2 hover:text-brand-purpleLight transition-colors leading-snug flex-1"

@@ -1,0 +1,17 @@
+{
+  "total_1_3": 5613,
+  "checkpoint_count": 4507,
+  "falhas_count": 1106,
+  "falhas_detalhes": {
+    "possui_fotos_no_yupoo": 313,
+    "possui_1_a_3_fotos": 85,
+    "removidos_ou_404": 0,
+    "inacessiveis_ou_erro": 708
+  },
+  "amostra_checkpoint_150": {
+    "realmente_1_a_3_fotos": 99,
+    "pct_realmente_1_a_3": 66.0,
+    "possui_4_mais_fotos": 0,
+    "pct_possui_4_mais": 0.0
+  }
+}

@@ -4,88 +4,67 @@
  * Fallback para constante OFFICIAL_CATEGORIES quando API indisponível.
  */
 import { slugify } from '../utils/slugify';
-import { fetchLatestLocalProducts, getProductSubcategory } from './productService';
+import { fetchLatestLocalProducts, getProductSubcategory, inferCategory } from './productService';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Categorias oficiais (fonte da verdade visual — mantidas como fallback)
+// Categorias oficiais da loja (exatamente as 8 categorias reais com produtos)
 // ─────────────────────────────────────────────────────────────────────────────
 export const OFFICIAL_CATEGORIES = [
+  {
+    id: 'camisetas-de-time',
+    name: 'Camisetas de Time',
+    slug: 'camisetas-de-time',
+    subcategories: ['Brasileiro Série A', 'Clubes Europeus', 'Seleções Nacionais'],
+    productCount: 5296
+  },
   {
     id: 'camisetas-de-time-retro',
     name: 'Camisetas de Time Retrô',
     slug: 'camisetas-de-time-retro',
     subcategories: ['Anos 90', 'Anos 80', 'Copas Clássicas'],
-    productCount: 0
+    productCount: 2323
+  },
+  {
+    id: 'chuteiras',
+    name: 'Chuteiras',
+    slug: 'chuteiras',
+    subcategories: ['Campo', 'Society', 'Futsal'],
+    productCount: 8062
+  },
+  {
+    id: 'chuteiras-infantil',
+    name: 'Chuteiras Infantil',
+    slug: 'chuteiras-infantil',
+    subcategories: ['Campo Infantil', 'Society Infantil'],
+    productCount: 159
   },
   {
     id: 'sapatilhas-de-atletismo',
     name: 'Sapatilhas de Atletismo',
     slug: 'sapatilhas-de-atletismo',
     subcategories: ['Pista e Campo', 'Velocidade', 'Salto'],
-    productCount: 0
+    productCount: 11
   },
   {
-    id: 'chuteiras',
-    name: 'Chuteiras',
-    slug: 'chuteiras',
-    subcategories: [],
-    productCount: 0
-  },
-  {
-    id: 'chuteiras-infantil',
-    name: 'Chuteiras Infantil',
-    slug: 'chuteiras-infantil',
-    subcategories: [],
-    productCount: 0
-  },
-  {
-    id: 'tabela-de-conversao-br-x-eur',
-    name: 'Tabela de Conversão BR x EUR',
-    slug: 'tabela-de-conversao-br-x-eur',
-    subcategories: ['Tamanhos Calçados', 'Medidas Vestuário'],
-    productCount: 0
-  },
-  {
-    id: 'camisetas-de-time',
-    name: 'Camisetas de Time',
-    slug: 'camisetas-de-time',
-    subcategories: ['Brasileiro Série A', 'Clubes Europeus', 'Seleções Nacionais'],
-    productCount: 3
-  },
-  {
-    id: 'tenis-de-corrida',
-    name: 'Tênis de Corrida',
-    slug: 'tenis-de-corrida',
-    subcategories: ['Amortecimento', 'Placa de Carbono', 'Treino Diário', 'Competição'],
-    productCount: 0
-  },
-  {
-    id: 'tenis-esportivo',
-    name: 'Tênis Esportivo',
-    slug: 'tenis-esportivo',
-    subcategories: ['Academia & Treino', 'Crossfit', 'Multiesportivo'],
-    productCount: 0
+    id: 'tenis-casuais',
+    name: 'Tênis Casuais',
+    slug: 'tenis-casuais',
+    subcategories: ['Casuais Premium', 'Sneakers Urbanos'],
+    productCount: 6705
   },
   {
     id: 'tenis-on-running-e-hoka',
     name: 'Tênis On Running e HOKA',
     slug: 'tenis-on-running-e-hoka',
     subcategories: ['On Running Cloud', 'HOKA Clifton', 'HOKA Bondi'],
-    productCount: 0
+    productCount: 2651
   },
   {
-    id: 'tenis-casuais-senha-hjh001077',
-    name: 'Tênis Casuais',
-    slug: 'tenis-casuais-senha-hjh001077',
-    subcategories: ['Casuais Premium', 'Sneakers Urbanos'],
-    productCount: 0
-  },
-  {
-    id: 'tenis-esportivos-senha-888888',
+    id: 'tenis-esportivos',
     name: 'Tênis Esportivos',
-    slug: 'tenis-esportivos-senha-888888',
+    slug: 'tenis-esportivos',
     subcategories: ['Treino & Gym', 'Running Performance'],
-    productCount: 0
+    productCount: 25015
   }
 ];
 
@@ -100,6 +79,12 @@ function normalizeStr(str) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: fallback que calcula contagens a partir de produtos.json local
 // ─────────────────────────────────────────────────────────────────────────────
+// Mapa de aliases: categoria interna (com senha) -> slug público limpo
+const CATEGORY_SLUG_ALIASES = {
+  'tenis-casuais-senha-hjh001077': 'tenis-casuais',
+  'tenis-esportivos-senha-888888': 'tenis-esportivos',
+};
+
 async function getCategoriesFromLocalProducts() {
   const countsBySlug = new Map();
   const subsBySlug   = new Map();
@@ -107,7 +92,10 @@ async function getCategoriesFromLocalProducts() {
 
   for (const p of (sourceProducts || [])) {
     if (!p?.category) continue;
-    const catSlug = slugify(p.category);
+    const inferred = inferCategory(p);
+    let catSlug = slugify(inferred);
+    // Remapeia slug interno para slug público
+    if (CATEGORY_SLUG_ALIASES[catSlug]) catSlug = CATEGORY_SLUG_ALIASES[catSlug];
     countsBySlug.set(catSlug, (countsBySlug.get(catSlug) || 0) + 1);
 
     if (p.subcategory?.trim()) {
@@ -117,20 +105,20 @@ async function getCategoriesFromLocalProducts() {
         subsBySlug.get(catSlug).add(p.subcategory.trim());
       }
     } else {
-      const catName = p.category?.trim() || '';
+      const catName = inferred;
       if (catName === 'Camisetas de Time' || catName === 'Camisetas de Time Retrô') {
-        const inferred = getProductSubcategory(p);
-        if (inferred) {
+        const teamInferred = getProductSubcategory(p);
+        if (teamInferred) {
           if (!subsBySlug.has(catSlug)) subsBySlug.set(catSlug, new Set());
-          subsBySlug.get(catSlug).add(inferred);
+          subsBySlug.get(catSlug).add(teamInferred);
         }
       }
     }
   }
 
   return OFFICIAL_CATEGORIES.map(cat => {
-    const realCount   = countsBySlug.get(cat.slug) || 0;
-    const dynamicSubs = subsBySlug.has(cat.slug) ? Array.from(subsBySlug.get(cat.slug)) : [];
+    const realCount   = countsBySlug.get(cat.slug) || cat.productCount || 0;
+    const dynamicSubs = subsBySlug.has(cat.slug) ? Array.from(subsBySlug.get(cat.slug)) : cat.subcategories;
     return {
       ...cat,
       productCount: realCount,
@@ -156,6 +144,68 @@ function saveLocalCategories(cats) {
   } catch (e) {}
 }
 
+function getCustomCategories() {
+  try {
+    const saved = localStorage.getItem('ln_sports_custom_categories');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return [];
+}
+
+function saveCustomCategories(cats) {
+  try {
+    localStorage.setItem('ln_sports_custom_categories', JSON.stringify(cats));
+  } catch (e) {}
+}
+
+function sanitizeCategories(rawCategories = []) {
+  const custom = getCustomCategories();
+  const officialSlugs = new Set(OFFICIAL_CATEGORIES.map(c => c.slug));
+  const customSlugs = new Set(custom.map(c => c.slug));
+  const seen = new Set();
+  const cleaned = [];
+
+  for (const cat of rawCategories) {
+    if (!cat || !cat.name) continue;
+    let name = cat.name.replace(/\s*-\s*Senha:\s*[\w\d]+/i, '').trim();
+    if (name === 'Tênis Esportivo') name = 'Tênis Esportivos';
+    if (name === 'Tênis de Corrida') continue;
+
+    let slug = cat.slug || slugify(name);
+    if (CATEGORY_SLUG_ALIASES[slug]) slug = CATEGORY_SLUG_ALIASES[slug];
+
+    if (!officialSlugs.has(slug) && !customSlugs.has(slug)) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+
+    cleaned.push({
+      ...cat,
+      name,
+      slug,
+      id: slug
+    });
+  }
+
+  // Completa com categorias oficiais se faltar alguma
+  for (const off of OFFICIAL_CATEGORIES) {
+    if (!seen.has(off.slug)) {
+      cleaned.push(off);
+      seen.add(off.slug);
+    }
+  }
+
+  // Completa com categorias customizadas
+  for (const c of custom) {
+    if (!seen.has(c.slug)) {
+      cleaned.push(c);
+      seen.add(c.slug);
+    }
+  }
+
+  // Retorna categorias com oficiais primeiro, seguidas de customizadas
+  return cleaned;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // categoryService
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,25 +222,68 @@ export const categoryService = {
       const res = await fetch('/api/categories', { headers });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) return data;
+        if (Array.isArray(data) && data.length > 0) return sanitizeCategories(data);
       }
     } catch (err) {
       console.warn('[categoryService] API indisponível, usando fallback local:', err.message);
     }
-    return getCategoriesFromLocalProducts();
+    const local = await getCategoriesFromLocalProducts();
+    return sanitizeCategories(local);
   },
 
   /**
    * Obtém uma categoria pelo slug.
+   * Suporta slugs legados (com senha) remapeados para o slug público limpo.
    */
   async getCategoryBySlug(slug) {
     const categories = await this.getCategories();
     const cleanSlug = slugify(slug);
+    // Resolve alias de slug legado para slug público
+    const resolved = CATEGORY_SLUG_ALIASES[cleanSlug] || cleanSlug;
     return categories.find(c =>
+      c.slug === resolved ||
       c.slug === cleanSlug ||
       c.slug === slug ||
+      slugify(c.name) === resolved ||
       slugify(c.name) === cleanSlug
     ) || null;
+  },
+
+  /**
+   * Cria uma nova categoria (admin).
+   * Impede duplicatas pelo nome ou slug.
+   */
+  async addCategory(name) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) throw new Error('Nome da categoria é obrigatório.');
+
+    const cleanSlug = slugify(trimmed);
+    const existing = await this.getCategories();
+    const isDup = existing.some(c =>
+      c.slug === cleanSlug ||
+      c.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (isDup) {
+      throw new Error('Esta categoria já existe no catálogo.');
+    }
+
+    const newCat = {
+      id: cleanSlug,
+      name: trimmed,
+      slug: cleanSlug,
+      subcategories: [],
+      productCount: 0,
+      isCustom: true
+    };
+
+    const currentCustom = getCustomCategories();
+    saveCustomCategories([...currentCustom, newCat]);
+
+    try {
+      await this.saveCategory(newCat);
+    } catch (e) {}
+
+    return newCat;
   },
 
   /**

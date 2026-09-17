@@ -19,6 +19,7 @@ export function ProductPage() {
   const [loading, setLoading] = useState(true);
   const { settings } = useStore();
   const { isAdmin } = useAuth();
+  const [selectedSize, setSelectedSize] = useState(null);
 
   useEffect(() => {
     async function loadProduct() {
@@ -72,11 +73,20 @@ export function ProductPage() {
     );
   }
 
-  const whatsappUrl = getProductWhatsAppUrl(product, settings);
+  const availableSizes = (() => {
+    if (!product) return [];
+    const cat = (product.category || '').toLowerCase();
+    if (cat.includes('tênis') || cat.includes('tenis') || cat.includes('chuteira')) {
+      return ['38', '39', '40', '41', '42', '43', '44'];
+    }
+    return ['P', 'M', 'G', 'GG', 'XGG'];
+  })();
 
-  const handleSetMainImage = (index) => {
-    productService.saveMainImageIndex(product.sourceUrl, product.slug, index);
-    setProduct(prev => ({ ...prev, mainImageIndex: index }));
+  const whatsappUrl = getProductWhatsAppUrl(product, { settings, size: selectedSize });
+
+  const handleSetMainImage = async (index) => {
+    const updated = await productService.setProductCover(product, index);
+    setProduct(updated);
   };
 
   return (
@@ -116,17 +126,12 @@ export function ProductPage() {
           <div className="lg:col-span-5 flex flex-col justify-between">
             <div className="space-y-6">
               
-              {/* Badges de Categoria e Subcategoria */}
+              {/* Badge de Categoria */}
               <div className="flex flex-wrap items-center gap-2">
                 {product.category && (
                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-brand-surface border border-brand-purple/40 text-brand-purpleNeon">
                     <Tag className="w-3 h-3" />
                     <span>{product.category}</span>
-                  </span>
-                )}
-                {product.subcategory && (
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-brand-surface border border-brand-border text-brand-purpleLight">
-                    {product.subcategory}
                   </span>
                 )}
                 {product.featured && (
@@ -150,6 +155,41 @@ export function ProductPage() {
                 <p className="text-xs text-slate-300 leading-relaxed">
                   Para consultar disponibilidade de tamanhos, prazos de entrega e valores atualizados, clique no botão abaixo para iniciar uma conversa no WhatsApp com nossa equipe.
                 </p>
+
+                {/* Seleção de Tamanho opcional */}
+                {availableSizes.length > 0 && (
+                  <div className="pt-1 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold uppercase tracking-wider text-slate-300">
+                        Tamanho pretendido:
+                      </span>
+                      {selectedSize && (
+                        <span className="text-brand-purpleLight font-bold">
+                          {selectedSize} (incluído na mensagem)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableSizes.map((sz) => {
+                        const isChosen = selectedSize === sz;
+                        return (
+                          <button
+                            key={sz}
+                            type="button"
+                            onClick={() => setSelectedSize(isChosen ? null : sz)}
+                            className={`min-w-[40px] px-2.5 py-1.5 rounded-xl text-xs font-black transition-all ${
+                              isChosen
+                                ? 'bg-brand-purple text-white shadow-md shadow-brand-purple/40 border border-brand-purpleLight scale-105'
+                                : 'bg-brand-surface border border-brand-border text-slate-300 hover:text-white hover:border-brand-purple/50'
+                            }`}
+                          >
+                            {sz}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Botão de Compra no Desktop */}
                 <div className="pt-2">
