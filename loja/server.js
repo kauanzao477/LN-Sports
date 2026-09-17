@@ -325,9 +325,15 @@ app.get('/api/categories', async (req, res) => {
     { id: 'tenis-de-corrida',           name: 'Tênis de Corrida',                    slug: 'tenis-de-corrida' },
     { id: 'tenis-esportivo',            name: 'Tênis Esportivo',                     slug: 'tenis-esportivo' },
     { id: 'tenis-on-running-e-hoka',    name: 'Tênis On Running e HOKA',             slug: 'tenis-on-running-e-hoka' },
-    { id: 'tenis-casuais-senha-hjh001077',  name: 'Tênis Casuais',                      slug: 'tenis-casuais-senha-hjh001077' },
-    { id: 'tenis-esportivos-senha-888888',  name: 'Tênis Esportivos',                    slug: 'tenis-esportivos-senha-888888' },
+    { id: 'tenis-casuais',              name: 'Tênis Casuais',                      slug: 'tenis-casuais' },
+    { id: 'tenis-esportivos',           name: 'Tênis Esportivos',                    slug: 'tenis-esportivos' },
   ];
+
+  // Aliases: nome no DB (lower) -> nome oficial da categoria
+  const CATEGORY_DB_ALIASES = {
+    'tênis casuais - senha: hjh001077': 'Tênis Casuais',
+    'tênis esportivos - senha: 888888':  'Tênis Esportivos',
+  };
 
   if (!db) {
     return res.json(OFFICIAL_CATEGORIES.map(c => ({ ...c, productCount: 0, subcategories: [] })));
@@ -339,7 +345,12 @@ app.get('/api/categories', async (req, res) => {
       `SELECT lower(category) as cat, COUNT(*) as cnt FROM products GROUP BY lower(category)`
     );
     const countMap = {};
-    for (const r of countResult.rows) countMap[r.cat] = parseInt(r.cnt);
+    for (const r of countResult.rows) {
+      // Remapeia aliases (categorias com senha) para o nome público
+      const publicName = CATEGORY_DB_ALIASES[r.cat] || null;
+      const key = publicName ? publicName.toLowerCase() : r.cat;
+      countMap[key] = (countMap[key] || 0) + parseInt(r.cnt);
+    }
 
     // Subcategorias por categoria
     const subResult = await db.query(
@@ -347,8 +358,10 @@ app.get('/api/categories', async (req, res) => {
     );
     const subMap = {};
     for (const r of subResult.rows) {
-      if (!subMap[r.cat]) subMap[r.cat] = new Set();
-      subMap[r.cat].add(r.subcategory);
+      const publicName = CATEGORY_DB_ALIASES[r.cat] || null;
+      const key = publicName ? publicName.toLowerCase() : r.cat;
+      if (!subMap[key]) subMap[key] = new Set();
+      subMap[key].add(r.subcategory);
     }
 
     const categories = OFFICIAL_CATEGORIES.map(cat => {

@@ -20,7 +20,7 @@ export function Header() {
     'Tênis de Corrida': 'Corrida',
     'Tênis Esportivo': 'Esportivo',
     'Tênis On Running e HOKA': 'On / HOKA',
-    'Tênis Casuais - Senha: HJH001077': 'Tênis Casuais'
+    'Tênis Casuais': 'Tênis Casuais',
   };
   const location = useLocation();
 
@@ -35,7 +35,8 @@ export function Header() {
     (cat) =>
       cat.name !== 'Tênis de Corrida' &&
       cat.name !== 'Tênis Esportivo' &&
-      cat.name !== 'Tênis Esportivos - Senha: 888888'
+      cat.name !== 'Tênis Esportivos - Senha: 888888' &&
+      cat.slug !== 'tenis-esportivos-senha-888888'
   );
 
   return (

@@ -74,16 +74,16 @@ export const OFFICIAL_CATEGORIES = [
     productCount: 0
   },
   {
-    id: 'tenis-casuais-senha-hjh001077',
+    id: 'tenis-casuais',
     name: 'Tênis Casuais',
-    slug: 'tenis-casuais-senha-hjh001077',
+    slug: 'tenis-casuais',
     subcategories: ['Casuais Premium', 'Sneakers Urbanos'],
     productCount: 0
   },
   {
-    id: 'tenis-esportivos-senha-888888',
+    id: 'tenis-esportivos',
     name: 'Tênis Esportivos',
-    slug: 'tenis-esportivos-senha-888888',
+    slug: 'tenis-esportivos',
     subcategories: ['Treino & Gym', 'Running Performance'],
     productCount: 0
   }
@@ -100,6 +100,12 @@ function normalizeStr(str) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: fallback que calcula contagens a partir de produtos.json local
 // ─────────────────────────────────────────────────────────────────────────────
+// Mapa de aliases: categoria interna (com senha) -> slug público limpo
+const CATEGORY_SLUG_ALIASES = {
+  'tenis-casuais-senha-hjh001077': 'tenis-casuais',
+  'tenis-esportivos-senha-888888': 'tenis-esportivos',
+};
+
 async function getCategoriesFromLocalProducts() {
   const countsBySlug = new Map();
   const subsBySlug   = new Map();
@@ -107,7 +113,9 @@ async function getCategoriesFromLocalProducts() {
 
   for (const p of (sourceProducts || [])) {
     if (!p?.category) continue;
-    const catSlug = slugify(p.category);
+    let catSlug = slugify(p.category);
+    // Remapeia slug interno para slug público
+    if (CATEGORY_SLUG_ALIASES[catSlug]) catSlug = CATEGORY_SLUG_ALIASES[catSlug];
     countsBySlug.set(catSlug, (countsBySlug.get(catSlug) || 0) + 1);
 
     if (p.subcategory?.trim()) {
@@ -182,13 +190,18 @@ export const categoryService = {
 
   /**
    * Obtém uma categoria pelo slug.
+   * Suporta slugs legados (com senha) remapeados para o slug público limpo.
    */
   async getCategoryBySlug(slug) {
     const categories = await this.getCategories();
     const cleanSlug = slugify(slug);
+    // Resolve alias de slug legado para slug público
+    const resolved = CATEGORY_SLUG_ALIASES[cleanSlug] || cleanSlug;
     return categories.find(c =>
+      c.slug === resolved ||
       c.slug === cleanSlug ||
       c.slug === slug ||
+      slugify(c.name) === resolved ||
       slugify(c.name) === cleanSlug
     ) || null;
   },

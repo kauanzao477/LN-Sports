@@ -55,6 +55,12 @@ export function normalizeStr(str) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
+// Mapa de aliases internos -> nome público (sem expor senha)
+const CATEGORY_ALIASES = {
+  'Tênis Casuais - Senha: HJH001077': 'Tênis Casuais',
+  'Tênis Esportivos - Senha: 888888':  'Tênis Esportivos',
+};
+
 // Inferir categoria a partir do sourceUrl (preserva lógica original)
 function inferCategory(product) {
   const url = product.sourceUrl || '';
@@ -65,6 +71,8 @@ function inferCategory(product) {
       product.category === 'Catálogo de Chuteiras - 02' ||
       product.category === 'Catálogo de Chuteiras - 03') return 'Chuteiras';
   if (product.category === 'Catálogo de Chuteiras - Infantil') return 'Chuteiras Infantil';
+  // Mapeia categorias internas (com senha) para nomes públicos
+  if (CATEGORY_ALIASES[product.category]) return CATEGORY_ALIASES[product.category];
   return product.category;
 }
 
@@ -251,7 +259,15 @@ export const productService = {
     if (category) {
       const catNorm = normalizeStr(category);
       const catSlug = slugify(category);
-      items = items.filter(p => p.category && (normalizeStr(p.category) === catNorm || slugify(p.category) === catSlug));
+      items = items.filter(p => {
+        if (!p.category) return false;
+        // Verifica correspondência direta
+        if (normalizeStr(p.category) === catNorm || slugify(p.category) === catSlug) return true;
+        // Verifica via alias (ex: 'Tênis Casuais - Senha: HJH001077' -> 'Tênis Casuais')
+        const mapped = CATEGORY_ALIASES[p.category];
+        if (mapped && (normalizeStr(mapped) === catNorm || slugify(mapped) === catSlug)) return true;
+        return false;
+      });
     }
     if (subcategory) {
       const subNorm = normalizeStr(subcategory);
