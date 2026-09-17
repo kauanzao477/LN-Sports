@@ -62,7 +62,7 @@ const CATEGORY_ALIASES = {
 };
 
 // Inferir categoria a partir do sourceUrl (preserva lógica original)
-function inferCategory(product) {
+export function inferCategory(product) {
   const url = product.sourceUrl || '';
   if (url.includes('lvguccinike.x.yupoo.com')) return 'Chuteiras';
   if (url.includes('ywq2000.x.yupoo.com')) return 'Chuteiras';
@@ -415,6 +415,58 @@ export const productService = {
   },
 
   /**
+   * Define manualmente uma imagem existente como capa do produto (images[0]).
+   * A imagem escolhida passa para images[0], todas as outras permanecem e a ordem é persistida.
+   */
+  async setProductCover(product, selectedIndex) {
+    if (!product || !Array.isArray(product.images) || selectedIndex < 0 || selectedIndex >= product.images.length) {
+      return product;
+    }
+
+    const chosenImage = product.images[selectedIndex];
+    const otherImages = product.images.filter((_, idx) => idx !== selectedIndex);
+    const newImages = [chosenImage, ...otherImages];
+
+    // Persiste no localStorage para manter a seleção após recarregar a página
+    let adminEdits = {};
+    try {
+      const saved = localStorage.getItem('ln_sports_admin_edits');
+      if (saved) adminEdits = JSON.parse(saved);
+    } catch (e) {}
+
+    const key = product.sourceUrl || product.slug;
+    adminEdits[key] = {
+      ...(adminEdits[key] || {}),
+      images: newImages,
+      mainImageIndex: 0
+    };
+    localStorage.setItem('ln_sports_admin_edits', JSON.stringify(adminEdits));
+
+    // Atualiza imediatamente no cache em memória
+    if (Array.isArray(liveProductsCache)) {
+      const found = liveProductsCache.find(p => (p.sourceUrl && p.sourceUrl === product.sourceUrl) || (p.slug && p.slug === product.slug));
+      if (found) {
+        found.images = newImages;
+        found.mainImageIndex = 0;
+      }
+    }
+
+    // Se produto possuir ID cadastrado no backend, sincroniza via API
+    if (product.id) {
+      try {
+        await apiFetch(`/api/admin/products/${product.id}/cover`, {
+          method: 'PATCH',
+          body: JSON.stringify({ images: newImages, coverIndex: selectedIndex })
+        });
+      } catch (err) {
+        // Fallback local já gravado com sucesso
+      }
+    }
+
+    return { ...product, images: newImages, mainImageIndex: 0 };
+  },
+
+  /**
    * Salva índice da imagem principal (admin).
    */
   async saveMainImageIndex(productSourceUrl, productSlug, index) {
@@ -428,8 +480,6 @@ export const productService = {
     adminEdits[key] = { ...(adminEdits[key] || {}), mainImageIndex: index };
     localStorage.setItem('ln_sports_admin_edits', JSON.stringify(adminEdits));
 
-    // Persiste no banco via API se tivermos o id
-    // (a chamada é feita pelo componente que conhece o id)
     return index;
   },
 

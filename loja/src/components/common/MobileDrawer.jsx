@@ -66,7 +66,7 @@ export function MobileDrawer({ isOpen, onClose }) {
             onClick={onClose}
             className="flex items-center justify-between px-4 py-3 text-white font-medium hover:bg-brand-card hover:text-brand-purpleLight transition-colors text-sm"
           >
-            <span>🏠 Início / Destaques</span>
+            <span>🏠 Início</span>
             <ChevronRight className="w-4 h-4 text-brand-muted shrink-0" />
           </Link>
 

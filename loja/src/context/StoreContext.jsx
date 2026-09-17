@@ -7,7 +7,7 @@ const StoreContext = createContext(null);
 export function StoreProvider({ children }) {
   const [settings, setSettings] = useState({
     storeName: 'LN SPORTS',
-    whatsappNumber: '5511999999999',
+    whatsappNumber: '5549998046866',
     whatsappEnabled: true,
     defaultMessage: 'Olá! Gostaria de falar com um atendente da LN SPORTS.',
     productMessageTemplate: 'Olá! Tenho interesse neste produto:\nProduto: {productName}\nLink: {productUrl}\nGostaria de saber mais informações.'
@@ -32,7 +32,7 @@ export function StoreProvider({ children }) {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 1500);
+    const interval = setInterval(loadData, 60000);
     return () => clearInterval(interval);
   }, []);
 

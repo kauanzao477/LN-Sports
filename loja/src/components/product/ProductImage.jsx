@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shirt } from 'lucide-react';
 import { getProxiedImageUrl } from '../../utils/imageUtils';
 
@@ -12,8 +12,28 @@ export function ProductImage({
 }) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [retry, setRetry] = useState(0);
 
-  const resolvedSrc = getProxiedImageUrl(src);
+  const baseResolved = getProxiedImageUrl(src);
+  const resolvedSrc = baseResolved && retry > 0
+    ? `${baseResolved}&retry=${retry}`
+    : baseResolved;
+
+  // Reseta o estado quando a imagem mudar (evita que imagens novas herdem erro anterior)
+  useEffect(() => {
+    setHasError(false);
+    setIsLoaded(false);
+    setRetry(0);
+  }, [src]);
+
+  const handleError = () => {
+    if (retry === 0 && baseResolved) {
+      // Tenta 1 retry automático
+      setRetry(1);
+    } else {
+      setHasError(true);
+    }
+  };
 
   // Fallback se a URL for vazia ou falhar
   if (!resolvedSrc || hasError) {
@@ -42,8 +62,9 @@ export function ProductImage({
         src={resolvedSrc}
         alt={alt}
         loading={loading}
+        decoding="async"
         onLoad={() => setIsLoaded(true)}
-        onError={() => setHasError(true)}
+        onError={handleError}
         className={`w-full h-full ${objectFit} transition-all duration-300 ${
           isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
         }`}

@@ -14,13 +14,13 @@ export function Header() {
   const visualLabels = {
     'Camisetas de Time': 'Camisetas',
     'Camisetas de Time Retrô': 'Retrô',
-    'Sapatilhas de Atletismo': 'Atletismo',
+    'Chuteiras': 'Chuteiras',
     'Chuteiras Infantil': 'Infantil',
-    'Tabela de Conversão BR x EUR': 'Conversão',
-    'Tênis de Corrida': 'Corrida',
-    'Tênis Esportivo': 'Esportivo',
-    'Tênis On Running e HOKA': 'On / HOKA',
+    'Sapatilhas de Atletismo': 'Atletismo',
     'Tênis Casuais': 'Tênis Casuais',
+    'Tênis On Running e HOKA': 'On / HOKA',
+    'Tênis Esportivos': 'Tênis Esportivos',
+    'Tabela de Conversão BR x EUR': 'Conversão',
   };
   const location = useLocation();
 
@@ -30,13 +30,13 @@ export function Header() {
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
-  // Exibe as categorias no menu de navegação desktop
+  // Exibe as categorias no menu de navegação desktop — apenas categorias oficiais
   const navCategories = categories.filter(
     (cat) =>
       cat.name !== 'Tênis de Corrida' &&
       cat.name !== 'Tênis Esportivo' &&
-      cat.name !== 'Tênis Esportivos - Senha: 888888' &&
-      cat.slug !== 'tenis-esportivos-senha-888888'
+      !cat.name?.includes('Senha:') &&
+      !cat.slug?.includes('senha')
   );
 
   return (

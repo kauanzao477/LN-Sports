@@ -37,15 +37,43 @@ function yupooImageProxyPlugin() {
       const account = pathParts[0] || 'minkang';
       const referer = `https://${account}.x.yupoo.com/`;
 
-      const upstream = await fetch(targetUrl, {
-        headers: {
-          'Referer': referer,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
-        }
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+
+      let upstream;
+      try {
+        upstream = await fetch(targetUrl, {
+          signal: controller.signal,
+          headers: {
+            'Referer': referer,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+          }
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!upstream.ok) {
+        // Tenta fallback com referer genérico
+        const retryUpstream = await fetch(targetUrl, {
+          headers: {
+            'Referer': 'https://x.yupoo.com/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'image/*,*/*;q=0.8'
+          }
+        });
+        if (retryUpstream.ok) {
+          const contentType = retryUpstream.headers.get('content-type') || 'image/jpeg';
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+          const arrayBuffer = await retryUpstream.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          res.setHeader('Content-Length', buffer.length);
+          res.end(buffer);
+          return;
+        }
+
         res.statusCode = upstream.status;
         res.end(`Upstream error: ${upstream.status} ${upstream.statusText}`);
         return;

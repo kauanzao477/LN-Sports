@@ -10,8 +10,8 @@ export function getProxiedImageUrl(src) {
   const trimmed = src.trim();
   if (!trimmed) return null;
 
-  // Always proxy Yupoo images (both dev and prod)
-  if (trimmed.includes('photo.yupoo.com')) {
+  // Always proxy Yupoo images (both dev and prod, including photo and uvd subdomains)
+  if (trimmed.includes('yupoo.com')) {
     return `/api/image-proxy?url=${encodeURIComponent(trimmed)}`;
   }
 

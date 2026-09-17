@@ -34,7 +34,7 @@ export function ProductGallery({
   const handleSetMain = (index) => {
     if (onSetMainImage) {
       onSetMainImage(index);
-      setSelectedIndex(index);
+      setSelectedIndex(0);
       setSavedFeedback(true);
       setTimeout(() => setSavedFeedback(false), 2000);
     }

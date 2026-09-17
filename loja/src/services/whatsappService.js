@@ -4,8 +4,8 @@
  * O número e templates são centralizados nas configurações da loja.
  */
 
-// Fallback padrão se não houver configuração no Firestore ou .env
-const DEFAULT_NUMBER = import.meta.env.VITE_STORE_WHATSAPP_NUMBER || '5511999999999';
+// Fallback padrão: número oficial LN-Sports (+55 49 99804-6866)
+const DEFAULT_NUMBER = import.meta.env.VITE_STORE_WHATSAPP_NUMBER || '5549998046866';
 const DEFAULT_STORE_NAME = import.meta.env.VITE_STORE_NAME || 'LN-Sports Outlet';
 
 /**
@@ -22,27 +22,27 @@ export function sanitizeWhatsAppNumber(num) {
 }
 
 /**
- * Gera o link do WhatsApp para um produto específico com mensagem pré-formatada.
+ * Gera o link do WhatsApp para um produto específico com mensagem pré-formatada inteligente.
+ * @param {Object} product - Produto selecionado
+ * @param {Object|string} options - Configurações da loja ou objeto com { size, settings }
  */
-export function getProductWhatsAppUrl(product, settings = {}) {
-  const number = sanitizeWhatsAppNumber(settings.whatsappNumber || DEFAULT_NUMBER);
-  const storeName = settings.storeName || DEFAULT_STORE_NAME;
-  
-  // Constrói a URL canônica do produto
-  const productUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/produto/${product.slug}`
-    : `https://lnsports.com.br/produto/${product.slug}`;
+export function getProductWhatsAppUrl(product, options = {}) {
+  const settings = options?.settings || (options?.whatsappNumber ? options : {});
+  const number = sanitizeWhatsAppNumber(settings?.whatsappNumber || DEFAULT_NUMBER);
 
-  // Template da mensagem oficial
-  const message = [
-    `Olá, ${storeName}! Tenho interesse neste produto:`,
-    `👕 *Produto:* ${product.name}`,
-    product.category ? `📁 *Categoria:* ${product.category}` : null,
-    product.subcategory ? `🏷️ *Subcategoria:* ${product.subcategory}` : null,
-    `🔗 *Link:* ${productUrl}`,
-    '',
-    'Gostaria de saber a disponibilidade e mais informações com um atendente!'
-  ].filter(Boolean).join('\n');
+  if (!product) {
+    return `https://wa.me/${number}?text=${encodeURIComponent('Olá! Gostaria de mais informações.')}`;
+  }
+
+  const productName = product.name || 'Produto LN SPORTS';
+  const size = options?.size || options?.selectedSize || product?.selectedSize || null;
+
+  let message = '';
+  if (size) {
+    message = `Olá! Tenho interesse no produto: ${productName}. Tamanho: ${size}. Gostaria de mais informações.`;
+  } else {
+    message = `Olá! Tenho interesse no produto: ${productName}. Gostaria de mais informações.`;
+  }
 
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
@@ -52,8 +52,6 @@ export function getProductWhatsAppUrl(product, settings = {}) {
  */
 export function getGeneralWhatsAppUrl(settings = {}) {
   const number = sanitizeWhatsAppNumber(settings.whatsappNumber || DEFAULT_NUMBER);
-  const storeName = settings.storeName || DEFAULT_STORE_NAME;
-
-  const message = `Olá! Gostaria de falar com um atendente da ${storeName}.`;
+  const message = 'Olá! Gostaria de falar com o atendimento da LN-Sports.';
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
