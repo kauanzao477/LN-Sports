@@ -1,0 +1,123 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Shirt } from 'lucide-react';
+import { getDirectImageUrl, getProxiedImageUrl } from '../../utils/imageUtils';
+
+export function ProductImage({
+  src,
+  alt = 'Produto LN SPORTS',
+  className = '',
+  aspectRatio = 'aspect-[4/5]',
+  loading = 'lazy',
+  objectFit = 'object-cover',
+  onError = null,
+}) {
+  const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [inView, setInView] = useState(false);
+  const containerRef = useRef(null);
+
+  const isYupoo = typeof src === 'string' && src.includes('photo.yupoo.com');
+  const baseResolved = useProxy
+    ? getProxiedImageUrl(src)
+    : getDirectImageUrl(src);
+
+  const resolvedSrc = baseResolved && retry > 0 && useProxy
+    ? `${baseResolved}&retry=${retry}`
+    : baseResolved;
+
+  // IntersectionObserver para lazy loading real
+  useEffect(() => {
+    if (!containerRef.current || typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '250px 0px' }
+    );
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [src]);
+
+  // Reseta o estado quando a imagem mudar
+  useEffect(() => {
+    setHasError(false);
+    setIsLoaded(false);
+    setUseProxy(false);
+    setRetry(0);
+  }, [src]);
+
+  const handleError = () => {
+    // 1. Tentar Yupoo direto primeiro -> se falhar, tenta via Proxy Cloudflare
+    if (!useProxy && isYupoo) {
+      setUseProxy(true);
+      setIsLoaded(false);
+      return;
+    }
+
+    // 2. Se falhar no proxy, tenta 1 retry com cachebuster
+    if (useProxy && retry === 0) {
+      setRetry(1);
+      return;
+    }
+
+    // 3. Se tudo falhar, marca erro e avisa o pai para pular foto se galeria
+    setHasError(true);
+    if (onError) {
+      try { onError(src); } catch { /* silencioso */ }
+    }
+  };
+
+  // Fallback se a URL for vazia ou falhar
+  if (!resolvedSrc || hasError) {
+    return (
+      <div
+        ref={containerRef}
+        className={`w-full ${aspectRatio} bg-gradient-to-br from-brand-surface via-brand-card to-brand-surface flex flex-col items-center justify-center p-4 text-center border border-brand-border/60 rounded-xl ${className}`}
+      >
+        <div className="w-12 h-12 rounded-2xl bg-brand-purple/10 border border-brand-purple/20 flex items-center justify-center text-brand-purpleLight mb-2 shadow-inner">
+          <Shirt className="w-6 h-6" />
+        </div>
+        <span className="text-[11px] text-brand-muted font-medium">Foto sob consulta</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative w-full ${aspectRatio} overflow-hidden rounded-xl bg-brand-surface border border-brand-border/40 ${className}`}
+    >
+      {/* Skeleton enquanto carrega */}
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-brand-card animate-pulse flex items-center justify-center">
+          <Shirt className="w-8 h-8 text-brand-purple/20 animate-bounce" />
+        </div>
+      )}
+
+      {inView && (
+        <img
+          src={resolvedSrc}
+          alt={alt}
+          loading={loading}
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onLoad={() => setIsLoaded(true)}
+          onError={handleError}
+          className={`w-full h-full ${objectFit} transition-all duration-300 ${
+            isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+          }`}
+        />
+      )}
+    </div>
+  );
+}

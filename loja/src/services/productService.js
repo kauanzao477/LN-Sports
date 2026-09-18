@@ -1,0 +1,696 @@
+/**
+ * Serviço de Produtos da LN SPORTS.
+ * Consome a API REST do server.js (Node/Express + PostgreSQL).
+ * O React nunca acessa o banco diretamente.
+ *
+ * Fallback: usa produtos.json / INITIAL_DEMO_PRODUCTS quando a API não está disponível.
+ */
+import { slugify } from '../utils/slugify';
+import { resolveCoverIndex } from '../utils/coverUtils';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo products (fallback quando API e JSON não disponíveis)
+// ─────────────────────────────────────────────────────────────────────────────
+const INITIAL_DEMO_PRODUCTS = [
+  {
+    id: 'demo-1',
+    name: 'Spain 2026 2 Stars Special Edition Jersey - Blue S-4XL',
+    slug: 'spain-2026-2-stars-special-edition-jersey-blue-s-4xl',
+    category: 'Seleções',
+    subcategory: 'Espanha',
+    images: [
+      'https://photo.yupoo.com/minkang/fe887e57fa/0755eab0.png',
+      'https://photo.yupoo.com/minkang/c67a4e4efa/f6cdf875.png'
+    ],
+    sourceUrl: 'https://minkang.x.yupoo.com/albums/248186871?uid=1',
+    sourceProvider: 'yupoo',
+    description: 'Camisa Edição Especial Espanha 2026 2-Star na cor azul.',
+    published: true, featured: true, status: 'published',
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'demo-2',
+    name: 'Spain 2026 Special Edition 2-Star - Red Jersey S-4XL',
+    slug: 'spain-2026-special-edition-2-star-red-jersey-s-4xl',
+    category: 'Seleções',
+    subcategory: 'Espanha',
+    images: [
+      'https://photo.yupoo.com/minkang/f7b1b4cbe1/c753afc3.jpg',
+      'https://photo.yupoo.com/minkang/5b414c0a98/2b5bcc8d.jpg'
+    ],
+    sourceUrl: 'https://minkang.x.yupoo.com/albums/247790784?uid=1',
+    sourceProvider: 'yupoo',
+    description: 'Manto Oficial Espanha 2026 Vermelha com duas estrelas bordadas.',
+    published: true, featured: true, status: 'published',
+    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilitários
+// ─────────────────────────────────────────────────────────────────────────────
+export function normalizeStr(str) {
+  if (!str) return '';
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+// Mapa de aliases internos -> nome público (sem expor senha)
+const CATEGORY_ALIASES = {
+  'Tênis Casuais - Senha: HJH001077': 'Tênis Casuais',
+  'Tênis Esportivos - Senha: 888888':  'Tênis Esportivos',
+};
+
+// Inferir categoria a partir do sourceUrl (preserva lógica original)
+export function inferCategory(product) {
+  const url = product.sourceUrl || '';
+  if (url.includes('lvguccinike.x.yupoo.com')) return 'Chuteiras';
+  if (url.includes('ywq2000.x.yupoo.com')) return 'Chuteiras';
+  if (url.includes('mzrycm102618.x.yupoo.com') && url.includes('/4742786')) return 'Chuteiras Infantil';
+  if (product.category === 'Catálogo de Chuteiras - 01' ||
+      product.category === 'Catálogo de Chuteiras - 02' ||
+      product.category === 'Catálogo de Chuteiras - 03') return 'Chuteiras';
+  if (product.category === 'Catálogo de Chuteiras - Infantil') return 'Chuteiras Infantil';
+  // Mapeia categorias internas (com senha) para nomes públicos
+  if (CATEGORY_ALIASES[product.category]) return CATEGORY_ALIASES[product.category];
+  return product.category;
+}
+
+// Time inference utilities (preservadas do original)
+const PREDEFINED_TEAMS = [
+  'Flamengo', 'Internacional', 'Palmeiras', 'Corinthians', 'São Paulo', 'Santos',
+  'Grêmio', 'Cruzeiro', 'Atlético-MG', 'Vasco', 'Botafogo', 'Fluminense',
+  'Bahia', 'Fortaleza', 'Ceará', 'Sport', 'Vitória', 'Athletico-PR', 'Coritiba'
+];
+
+const TEAM_ALIASES = {
+  'inter': 'Internacional',
+  'atletico mg': 'Atlético-MG',
+  'atletico-mg': 'Atlético-MG',
+  'athletico pr': 'Athletico-PR',
+  'athletico-pr': 'Athletico-PR',
+};
+
+let knownTeamsCache = null;
+function getKnownTeams(allProducts = []) {
+  if (knownTeamsCache) return knownTeamsCache;
+  knownTeamsCache = new Set();
+  for (const p of allProducts) {
+    if (p?.subcategory?.trim()) knownTeamsCache.add(normalizeStr(p.subcategory));
+  }
+  for (const team of PREDEFINED_TEAMS) knownTeamsCache.add(normalizeStr(team));
+  for (const alias of Object.keys(TEAM_ALIASES)) knownTeamsCache.add(normalizeStr(alias));
+  return knownTeamsCache;
+}
+
+function inferTeamFromName(name, allProducts = []) {
+  const nameNorm = normalizeStr(name);
+  const teams = getKnownTeams(allProducts);
+  let bestMatch = '';
+  for (const teamNorm of teams) {
+    if (nameNorm.includes(teamNorm) && teamNorm.length > bestMatch.length) {
+      bestMatch = teamNorm;
+    }
+  }
+  if (!bestMatch) return '';
+  const aliasKey = Object.keys(TEAM_ALIASES).find(k => normalizeStr(k) === bestMatch);
+  if (aliasKey) return TEAM_ALIASES[aliasKey];
+  const canonical = PREDEFINED_TEAMS.find(t => normalizeStr(t) === bestMatch);
+  if (canonical) return canonical;
+  return bestMatch;
+}
+
+export function getProductSubcategory(product, allProducts = []) {
+  if (!product) return '';
+  if (product.subcategory?.trim()) return normalizeStr(product.subcategory);
+  const cat = product.category?.trim() || '';
+  if (cat === 'Camisetas de Time' || cat === 'Camisetas de Time Retrô') {
+    return inferTeamFromName(product.name || '', allProducts);
+  }
+  return '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Determina base URL da API (permite VITE_API_URL para conectar ao Render)
+// ─────────────────────────────────────────────────────────────────────────────
+function apiUrl(path) {
+  const customApi = import.meta.env.VITE_API_URL;
+  if (customApi) {
+    return `${customApi.replace(/\/$/, '')}${path}`;
+  }
+  return path;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cache e Loader do Catálogo Estático Particionado (Cloudflare Pages)
+// ─────────────────────────────────────────────────────────────────────────────
+let manifestCache = null;
+let categoryCache = new Map();
+let productBySlugCache = new Map();
+let searchIndexCache = null;
+
+export async function fetchManifest() {
+  if (manifestCache) return manifestCache;
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/catalog/manifest.json`);
+    if (res.ok) {
+      manifestCache = await res.json();
+      // Pre-popula cache de produtos da Home
+      if (manifestCache.homeFeatured) {
+        for (const p of manifestCache.homeFeatured) {
+          if (p.slug) productBySlugCache.set(p.slug, p);
+        }
+      }
+      if (manifestCache.homeRecent) {
+        for (const p of manifestCache.homeRecent) {
+          if (p.slug) productBySlugCache.set(p.slug, p);
+        }
+      }
+      return manifestCache;
+    }
+  } catch (e) {
+    console.warn('[productService] Erro ao carregar manifest.json:', e.message);
+  }
+  return {
+    categories: [],
+    slugMap: {},
+    homeFeatured: INITIAL_DEMO_PRODUCTS,
+    homeRecent: INITIAL_DEMO_PRODUCTS,
+    totals: { products: 0, images: 0 }
+  };
+}
+
+export async function fetchCategoryProducts(catSlug) {
+  const cleanSlug = slugify(catSlug);
+  const resolvedSlug = CATEGORY_SLUG_ALIASES[cleanSlug] || cleanSlug;
+
+  if (categoryCache.has(resolvedSlug)) {
+    return categoryCache.get(resolvedSlug);
+  }
+
+  const manifest = await fetchManifest();
+  const catMeta = manifest.categories?.find(c => c.slug === resolvedSlug || slugify(c.name) === resolvedSlug);
+  const chunks = catMeta?.chunks || [`${resolvedSlug}.json`];
+
+  let adminEdits = {};
+  try {
+    const saved = localStorage.getItem('ln_sports_admin_edits');
+    if (saved) adminEdits = JSON.parse(saved);
+  } catch (e) {}
+
+  const combinedItems = [];
+  for (const chunk of chunks) {
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}data/catalog/${chunk}`);
+      if (res.ok) {
+        const items = await res.json();
+        if (Array.isArray(items)) {
+          for (let i = 0; i < items.length; i++) {
+            const raw = items[i];
+            const override = adminEdits[raw.sourceUrl] || adminEdits[raw.slug] || {};
+            const product = {
+              id: raw.slug || raw.id || String(i),
+              ...raw,
+              ...override,
+              published: raw.published !== false,
+              status: raw.status || 'published'
+            };
+            const adminIdx = override.mainImageIndex;
+            product.mainImageIndex = resolveCoverIndex(
+              product,
+              Number.isInteger(adminIdx) ? adminIdx : null
+            );
+            combinedItems.push(product);
+            if (product.slug) {
+              productBySlugCache.set(product.slug, product);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[productService] Falha ao carregar chunk ${chunk}:`, e.message);
+    }
+  }
+
+  categoryCache.set(resolvedSlug, combinedItems);
+  return combinedItems;
+}
+
+export async function fetchSearchIndex() {
+  if (searchIndexCache) return searchIndexCache;
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}data/catalog/search-index.json`);
+    if (res.ok) {
+      searchIndexCache = await res.json();
+      return searchIndexCache;
+    }
+  } catch (e) {
+    console.warn('[productService] Falha ao carregar search-index.json:', e.message);
+  }
+  return [];
+}
+
+// Aliases de categorias com senha para slug limpo
+const CATEGORY_SLUG_ALIASES = {
+  'tenis-casuais-senha-hjh001077': 'tenis-casuais',
+  'tenis-esportivos-senha-888888': 'tenis-esportivos',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API helpers (usado apenas pelo painel admin no Render)
+// ─────────────────────────────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const token = sessionStorage.getItem('ln_sports_admin_token');
+  const headers = { 'Content-Type': 'application/json', ...opts.headers };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(apiUrl(path), { ...opts, headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constantes
+// ─────────────────────────────────────────────────────────────────────────────
+export const PRODUCTS_PER_PAGE = 24;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// productService
+// ─────────────────────────────────────────────────────────────────────────────
+export const productService = {
+
+  /**
+   * Busca produtos com filtros e paginação.
+   * Admin com token: pode consultar API do Render.
+   * Catálogo público: 100% estático sem depender do Render.
+   */
+  async getProducts({
+    status = 'all',
+    category = null,
+    subcategory = null,
+    featured = null,
+    limitCount = PRODUCTS_PER_PAGE,
+    searchQuery = '',
+    sortBy = 'newest',
+    page = 1,
+  } = {}) {
+    const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
+
+    // Admin autenticado tenta a API do Render primeiro
+    if (isAdmin) {
+      try {
+        const params = new URLSearchParams();
+        params.set('page', page);
+        params.set('limit', limitCount);
+        if (status && status !== 'all') params.set('status', status);
+        if (category) params.set('category', category);
+        if (subcategory) params.set('subcategory', subcategory);
+        if (featured !== null) params.set('featured', featured);
+        if (searchQuery) params.set('search', searchQuery);
+        if (sortBy) params.set('sort', sortBy === 'newest' ? 'newest' : sortBy);
+
+        const result = await apiFetch(`/api/products?${params.toString()}`);
+        if (result?.data) {
+          result.data = result.data.map(p => ({ ...p, category: inferCategory(p) }));
+        }
+        return result;
+      } catch (err) {
+        console.warn('[productService] API admin indisponível, usando catálogo estático:', err.message);
+      }
+    }
+
+    // Catálogo público estático (Cloudflare Pages)
+
+    // 1. Busca por texto
+    if (searchQuery && searchQuery.trim()) {
+      const q = normalizeStr(searchQuery);
+      const searchItems = await fetchSearchIndex();
+      let matched = searchItems.filter(p =>
+        normalizeStr(p.name).includes(q) ||
+        normalizeStr(p.category).includes(q) ||
+        normalizeStr(p.subcategory).includes(q)
+      );
+
+      if (category) {
+        const catNorm = normalizeStr(category);
+        const catSlug = slugify(category);
+        matched = matched.filter(p => {
+          if (!p.category) return false;
+          return normalizeStr(p.category) === catNorm || slugify(p.category) === catSlug;
+        });
+      }
+
+      if (subcategory) {
+        const subNorm = normalizeStr(subcategory);
+        matched = matched.filter(p => p.subcategory && normalizeStr(p.subcategory) === subNorm);
+      }
+
+      if (featured !== null) {
+        matched = matched.filter(p => Boolean(p.featured) === Boolean(featured));
+      }
+
+      if (sortBy === 'name-asc') matched.sort((a, b) => a.name.localeCompare(b.name));
+      else if (sortBy === 'name-desc') matched.sort((a, b) => b.name.localeCompare(a.name));
+
+      const offset = (page - 1) * limitCount;
+      const sliced = matched.slice(offset, offset + limitCount).map(p => ({
+        id: p.slug,
+        name: p.name,
+        slug: p.slug,
+        category: p.category,
+        subcategory: p.subcategory || '',
+        images: p.image ? [p.image] : [],
+        mainImageIndex: 0,
+        featured: Boolean(p.featured),
+        sourceUrl: p.sourceUrl || '',
+        published: true,
+        status: 'published'
+      }));
+
+      return {
+        data: sliced,
+        total: matched.length,
+        page,
+        totalPages: Math.ceil(matched.length / limitCount),
+        limit: limitCount,
+      };
+    }
+
+    // 2. Busca por categoria
+    if (category) {
+      const catSlug = slugify(category);
+      const resolvedSlug = CATEGORY_SLUG_ALIASES[catSlug] || catSlug;
+      let items = await fetchCategoryProducts(resolvedSlug);
+
+      if (status && status !== 'all') {
+        items = items.filter(p => p.status === status);
+      }
+      if (subcategory) {
+        const subNorm = normalizeStr(subcategory);
+        const subSlug = slugify(subcategory);
+        items = items.filter(p => p.subcategory && (normalizeStr(p.subcategory) === subNorm || slugify(p.subcategory) === subSlug));
+      }
+      if (featured !== null) {
+        items = items.filter(p => Boolean(p.featured) === Boolean(featured));
+      }
+
+      if (sortBy === 'name-asc') items.sort((a, b) => a.name.localeCompare(b.name));
+      else if (sortBy === 'name-desc') items.sort((a, b) => b.name.localeCompare(a.name));
+      else items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      const offset = (page - 1) * limitCount;
+      const sliced = items.slice(offset, offset + limitCount);
+
+      return {
+        data: sliced,
+        total: items.length,
+        page,
+        totalPages: Math.ceil(items.length / limitCount),
+        limit: limitCount,
+      };
+    }
+
+    // 3. Catálogo geral / Página inicial (produtos recentes)
+    const manifest = await fetchManifest();
+    let generalItems = manifest.homeRecent || [];
+
+    if (generalItems.length === 0) {
+      generalItems = await fetchCategoryProducts('camisetas-de-time');
+    }
+
+    if (featured !== null) {
+      generalItems = generalItems.filter(p => Boolean(p.featured) === Boolean(featured));
+    }
+
+    const offset = (page - 1) * limitCount;
+    const sliced = generalItems.slice(offset, offset + limitCount);
+
+    return {
+      data: sliced,
+      total: generalItems.length,
+      page,
+      totalPages: Math.ceil(generalItems.length / limitCount),
+      limit: limitCount,
+    };
+  },
+
+  /**
+   * Escuta atualizações de produtos (polling seguro para admin, estático para público).
+   */
+  subscribeProducts({ status = 'all', category = null, limitCount = PRODUCTS_PER_PAGE, callback }) {
+    let cancelled = false;
+    let lastFingerprint = '';
+
+    const execute = async () => {
+      if (cancelled) return;
+      try {
+        const result = await this.getProducts({ status, category, limitCount, page: 1 });
+        const items = result?.data || result || [];
+        const fingerprint = `${items.length}-${items.map(p => p.slug || p.sourceUrl).join('|')}`;
+        if (fingerprint !== lastFingerprint) {
+          lastFingerprint = fingerprint;
+          if (!cancelled) callback(items);
+        }
+      } catch (e) {
+        // silencioso
+      }
+    };
+
+    execute();
+    const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
+    // Polling apenas para admin no painel; público não necessita de polling agressivo
+    const interval = setInterval(execute, isAdmin ? 5000 : 60000);
+    return () => { cancelled = true; clearInterval(interval); };
+  },
+
+  /**
+   * Obtém um produto pelo slug usando o índice do manifest.
+   */
+  async getProductBySlug(slug) {
+    if (!slug) return null;
+
+    const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
+    if (isAdmin) {
+      try {
+        const product = await apiFetch(`/api/products/${slug}`);
+        if (product) return { ...product, category: inferCategory(product) };
+      } catch (err) {
+        console.warn('[productService] Fallback local para slug:', err.message);
+      }
+    }
+
+    // 1. Verifica se já está em memória
+    if (productBySlugCache.has(slug)) {
+      return productBySlugCache.get(slug);
+    }
+
+    // 2. Consulta o manifest para descobrir em qual categoria/chunk está o produto
+    const manifest = await fetchManifest();
+    const mapping = manifest.slugMap ? manifest.slugMap[slug] : null;
+
+    if (mapping && mapping.categorySlug) {
+      await fetchCategoryProducts(mapping.categorySlug);
+      if (productBySlugCache.has(slug)) {
+        return productBySlugCache.get(slug);
+      }
+    }
+
+    // 3. Fallback: procura nos destaques/recentes do manifest
+    const fallbackList = [...(manifest.homeFeatured || []), ...(manifest.homeRecent || [])];
+    const foundFallback = fallbackList.find(p => p.slug === slug);
+    if (foundFallback) {
+      productBySlugCache.set(slug, foundFallback);
+      return foundFallback;
+    }
+
+    return null;
+  },
+
+  /**
+   * Obtém produtos relacionados na mesma categoria a partir do chunk já carregado.
+   */
+  async getRelatedProducts(currentProduct, limitCount = 4) {
+    if (!currentProduct) return [];
+
+    const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
+    if (isAdmin) {
+      try {
+        const data = await apiFetch(`/api/products/${currentProduct.slug}/related?limit=${limitCount}`);
+        return Array.isArray(data) ? data.map(p => ({ ...p, category: inferCategory(p) })) : [];
+      } catch {
+        // Fallback local
+      }
+    }
+
+    const catSlug = slugify(currentProduct.category || '');
+    const items = await fetchCategoryProducts(catSlug);
+    return items
+      .filter(p => p.slug !== currentProduct.slug && (p.published !== false))
+      .slice(0, limitCount);
+  },
+
+  /**
+   * Cria ou atualiza um produto (admin).
+   */
+  async saveProduct(productData) {
+    const cleanSlug = productData.slug || slugify(productData.name);
+    const payload = {
+      name: productData.name,
+      slug: cleanSlug,
+      category: productData.category || 'Geral',
+      subcategory: productData.subcategory || '',
+      images: productData.images || [],
+      sourceUrl: productData.sourceUrl || '',
+      description: productData.description || '',
+      status: productData.status || 'draft',
+      featured: Boolean(productData.featured),
+      mainImageIndex: productData.mainImageIndex || 0,
+    };
+
+    if (productData.id && !productData.id.startsWith('demo-')) {
+      return apiFetch(`/api/admin/products/${productData.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+    }
+
+    // Fallback local para modo sem banco
+    const current = getLocalProducts();
+    const newProduct = { id: `local-${Date.now()}`, ...payload };
+    liveProductsCache = [newProduct, ...current];
+    return newProduct;
+  },
+
+  /**
+   * Toggle publish (admin).
+   */
+  async togglePublish(productId) {
+    try {
+      return await apiFetch(`/api/admin/products/${productId}/publish`, { method: 'PATCH' });
+    } catch (err) {
+      console.error('[productService] togglePublish error:', err.message);
+      throw err;
+    }
+  },
+
+  /**
+   * Toggle featured (admin).
+   */
+  async toggleFeatured(productId) {
+    try {
+      return await apiFetch(`/api/admin/products/${productId}/featured`, { method: 'PATCH' });
+    } catch (err) {
+      console.error('[productService] toggleFeatured error:', err.message);
+      throw err;
+    }
+  },
+
+  /**
+   * Define manualmente uma imagem existente como capa do produto (images[0]).
+   * A imagem escolhida passa para images[0], todas as outras permanecem e a ordem é persistida.
+   */
+  async setProductCover(product, selectedIndex) {
+    if (!product || !Array.isArray(product.images) || selectedIndex < 0 || selectedIndex >= product.images.length) {
+      return product;
+    }
+
+    const chosenImage = product.images[selectedIndex];
+    const otherImages = product.images.filter((_, idx) => idx !== selectedIndex);
+    const newImages = [chosenImage, ...otherImages];
+
+    // Persiste no localStorage para manter a seleção após recarregar a página
+    let adminEdits = {};
+    try {
+      const saved = localStorage.getItem('ln_sports_admin_edits');
+      if (saved) adminEdits = JSON.parse(saved);
+    } catch (e) {}
+
+    const key = product.sourceUrl || product.slug;
+    adminEdits[key] = {
+      ...(adminEdits[key] || {}),
+      images: newImages,
+      mainImageIndex: 0
+    };
+    localStorage.setItem('ln_sports_admin_edits', JSON.stringify(adminEdits));
+
+    // Atualiza imediatamente no cache em memória
+    if (Array.isArray(liveProductsCache)) {
+      const found = liveProductsCache.find(p => (p.sourceUrl && p.sourceUrl === product.sourceUrl) || (p.slug && p.slug === product.slug));
+      if (found) {
+        found.images = newImages;
+        found.mainImageIndex = 0;
+      }
+    }
+
+    // Se produto possuir ID cadastrado no backend, sincroniza via API
+    if (product.id) {
+      try {
+        await apiFetch(`/api/admin/products/${product.id}/cover`, {
+          method: 'PATCH',
+          body: JSON.stringify({ images: newImages, coverIndex: selectedIndex })
+        });
+      } catch (err) {
+        // Fallback local já gravado com sucesso
+      }
+    }
+
+    return { ...product, images: newImages, mainImageIndex: 0 };
+  },
+
+  /**
+   * Salva índice da imagem principal (admin).
+   */
+  async saveMainImageIndex(productSourceUrl, productSlug, index) {
+    // Guarda no localStorage para UI imediata
+    let adminEdits = {};
+    try {
+      const saved = localStorage.getItem('ln_sports_admin_edits');
+      if (saved) adminEdits = JSON.parse(saved);
+    } catch (e) {}
+    const key = productSourceUrl || productSlug;
+    adminEdits[key] = { ...(adminEdits[key] || {}), mainImageIndex: index };
+    localStorage.setItem('ln_sports_admin_edits', JSON.stringify(adminEdits));
+
+    return index;
+  },
+
+  /**
+   * Remove um produto (admin).
+   */
+  async deleteProduct(productId) {
+    try {
+      await apiFetch(`/api/admin/products/${productId}`, { method: 'DELETE' });
+      return true;
+    } catch (err) {
+      console.error('[productService] deleteProduct error:', err.message);
+      return false;
+    }
+  },
+
+  /**
+   * Métricas do painel administrativo.
+   */
+  async getDashboardMetrics() {
+    try {
+      return await apiFetch('/api/admin/dashboard');
+    } catch {
+      // Fallback calculado localmente
+      const result = await this.getProducts({ status: 'all', limitCount: 100, page: 1 });
+      const all = result?.data || [];
+      const categoriesSet = new Set(all.map(p => p.category).filter(Boolean));
+      return {
+        total: result?.total || all.length,
+        published: all.filter(p => p.status === 'published').length,
+        draft: all.filter(p => p.status === 'draft').length,
+        inactive: all.filter(p => p.status === 'inactive').length,
+        featured: all.filter(p => p.featured).length,
+        categoriesCount: categoriesSet.size,
+        withoutImages: all.filter(p => !p.images?.length).length,
+        withoutDescription: all.filter(p => !p.description).length,
+      };
+    }
+  },
+};
