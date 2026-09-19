@@ -1,5 +1,6 @@
-name = "ln-sports"
-compatibility_date = "2024-09-01"
+﻿name = "ln-sports"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-09-19"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
