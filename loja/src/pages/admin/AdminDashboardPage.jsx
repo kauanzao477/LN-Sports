@@ -25,7 +25,7 @@ export function AdminDashboardPage() {
       try {
         const token = sessionStorage.getItem('ln_sports_admin_token');
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await fetch('/api/admin/dashboard', { headers });
+        const res = await fetch('/api/admin/dashboard', { headers }, []);
         if (res.ok) {
           const data = await res.json();
           setMetrics(prev => ({

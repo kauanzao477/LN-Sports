@@ -72,7 +72,7 @@ export function AdminSettingsPage() {
 
   const handleChange = (key) => (e) => {
     const val = e.target.type === "checkbox" ? e.target.checked : e.target.value;
-    setSettings(prev => ({ ...prev, [key]: val }));
+    setSettings(prev => ({ ...prev, [key]: val }, []));
   };
 
   const handleSave = async () => {

@@ -462,7 +462,7 @@ export const productService = {
     execute();
     const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
     // Polling apenas para admin no painel; público não necessita de polling agressivo
-    const interval = setInterval(execute, isAdmin ? 5000 : 60000);
+    const interval = setTimeout(execute, isAdmin ? 5000 : 60000);
     return () => { cancelled = true; clearInterval(interval); };
   },
 

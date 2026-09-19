@@ -33,7 +33,7 @@ export function StoreProvider({ children }) {
   useEffect(() => {
     loadData();
     const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
-    const interval = setInterval(loadData, isAdmin ? 5000 : 60000);
+    const interval = setTimeout(loadData, isAdmin ? 5000 : 60000);
     return () => clearInterval(interval);
   }, []);
 
