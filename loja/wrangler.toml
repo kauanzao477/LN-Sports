@@ -1,0 +1,12 @@
+name = "ln-sports"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ADMIN_EMAIL = "lnGSN@lnsports.com.br"
+VITE_STORE_NAME = "LN SPORTS"
+VITE_STORE_WHATSAPP_NUMBER = "5549998046866"
+
+# No Cloudflare Pages, o binding HYPERDRIVE é associado no painel do projeto:
+# Settings -> Functions -> Hyperdrive bindings -> Variable name: HYPERDRIVE
+# Em desenvolvimento ou fallback, a conexão também aceita DATABASE_URL.
