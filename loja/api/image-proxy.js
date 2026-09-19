@@ -17,7 +17,12 @@ const YUPOO_LOCK_CODES = {
 // Conta da foto -> subdomínio do álbum (para o Referer correto).
 // Ex: fotos 'ywq2000_v' pertencem ao álbum 'ywq2000.x.yupoo.com'.
 const YUPOO_ACCOUNT_DOMAIN = {
-  'ywq2000_v': 'ywq2000',
+  'ywq2000_v':    'ywq2000',
+  'mzrycm102618': 'mzrycm102618',
+  'lvguccinike':  'lvguccinike',
+  'minkang':      'minkang',
+  'aj-dongli':    'aj-dongli',
+  '1998shoe':     '1998shoe',
 };
 
 function getYupooReferer(account) {

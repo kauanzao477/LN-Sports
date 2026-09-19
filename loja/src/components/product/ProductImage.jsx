@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shirt } from 'lucide-react';
-import { getDirectImageUrl, getProxiedImageUrl } from '../../utils/imageUtils';
+import { getDirectImageUrl, getProxiedImageUrl, isYupooUrl } from '../../utils/imageUtils';
 
 export function ProductImage({
   src,
@@ -18,7 +18,7 @@ export function ProductImage({
   const [inView, setInView] = useState(false);
   const containerRef = useRef(null);
 
-  const isYupoo = typeof src === 'string' && src.includes('photo.yupoo.com');
+  const isYupoo = isYupooUrl(src);
   const baseResolved = useProxy
     ? getProxiedImageUrl(src)
     : getDirectImageUrl(src);
@@ -111,7 +111,14 @@ export function ProductImage({
           loading={loading}
           decoding="async"
           referrerPolicy="no-referrer"
-          onLoad={() => setIsLoaded(true)}
+          onLoad={(e) => {
+            // Se Yupoo devolver 200 com imagem de placeholder ("图片暂时无法展示" tem 470x380)
+            if (isYupoo && e.target.naturalWidth === 470 && e.target.naturalHeight === 380) {
+              handleError();
+              return;
+            }
+            setIsLoaded(true);
+          }}
           onError={handleError}
           className={`w-full h-full ${objectFit} transition-all duration-300 ${
             isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
