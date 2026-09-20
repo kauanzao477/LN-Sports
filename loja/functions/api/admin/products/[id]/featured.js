@@ -23,25 +23,23 @@ export async function onRequestPatch(context) {
   try {
     const updated = await withDb(env, async (client) => {
       const { rows } = await client.query(
-        `UPDATE products SET featured = NOT featured, updated_at = NOW() WHERE id = $1 RETURNING *`,
+        `UPDATE products
+         SET featured = NOT featured,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
         [id]
       );
-      
-    // Salva explicitamente a capa escolhida no Neon
-    if (mainImageIndex !== undefined) {
-        await client.query('UPDATE products SET main_image_index = await client.query(
-        `UPDATE products SET featured = NOT featured, updated_at = NOW() WHERE id = $1 RETURNING *`,
-        [id]
-      );
-       WHERE id = $2', [mainImageIndex, id]);
-    }
-if (!rows.length) return null;
+
+      if (!rows.length) return null;
+
       return rowToProduct(rows[0]);
     });
 
     if (!updated) {
       return jsonResponse({ error: 'Produto não encontrado' }, 404);
     }
+
     return jsonResponse(updated);
   } catch (err) {
     console.error('[Pages Functions PATCH .../featured] Error:', err.message);
