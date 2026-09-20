@@ -171,7 +171,7 @@ export function AdminProductsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {products.map((product) => {
             const mainIdx = (product.mainImageIndex !== undefined && product.mainImageIndex !== null) ? product.mainImageIndex : 0;
-            const coverImg = product.images?.[mainIdx] || product.images?.[0] || null;
+            const coverImg = product.images?.[mainIdx] || getCoverImage(product) || null;
             const imgCount = product.images?.length || 0;
 
             return (

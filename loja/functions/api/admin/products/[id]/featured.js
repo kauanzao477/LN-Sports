@@ -26,7 +26,16 @@ export async function onRequestPatch(context) {
         `UPDATE products SET featured = NOT featured, updated_at = NOW() WHERE id = $1 RETURNING *`,
         [id]
       );
-      if (!rows.length) return null;
+      
+    // Salva explicitamente a capa escolhida no Neon
+    if (mainImageIndex !== undefined) {
+        await client.query('UPDATE products SET main_image_index = await client.query(
+        `UPDATE products SET featured = NOT featured, updated_at = NOW() WHERE id = $1 RETURNING *`,
+        [id]
+      );
+       WHERE id = $2', [mainImageIndex, id]);
+    }
+if (!rows.length) return null;
       return rowToProduct(rows[0]);
     });
 
