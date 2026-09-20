@@ -1,0 +1,25 @@
+﻿name = "ln-sports"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-09-19"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ADMIN_EMAIL = "lnGSN@lnsports.com.br"
+VITE_STORE_NAME = "LN SPORTS"
+VITE_STORE_WHATSAPP_NUMBER = "5549998046866"
+
+# ─────────────────────────────────────────────────────────────
+# SEGREDOS OBRIGATÓRIOS DO PAINEL ADMIN (NÃO colocar valores aqui).
+# Configure no painel Cloudflare Pages:
+#   Settings -> Environment Variables -> Add variable (Production + Preview):
+#     ADMIN_PASSWORD_HASH = hash bcrypt da senha (gere com: node scripts/hash-senha.js SuaSenha)
+#     ADMIN_JWT_SECRET    = string longa aleatória (64+ hex)
+#     DATABASE_URL        = (opcional) fallback se não usar Hyperdrive
+# Ou via CLI: wrangler pages secret put ADMIN_PASSWORD_HASH
+#
+# Sem ADMIN_PASSWORD_HASH o POST /api/admin/login sempre retorna 401.
+# ─────────────────────────────────────────────────────────────
+
+# No Cloudflare Pages, o binding HYPERDRIVE é associado no painel do projeto:
+# Settings -> Functions -> Hyperdrive bindings -> Variable name: HYPERDRIVE
+# Em desenvolvimento ou fallback, a conexão também aceita DATABASE_URL.
