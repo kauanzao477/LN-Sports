@@ -184,16 +184,15 @@ export async function fetchManifest() {
 }
 
 export async function fetchCoverOverrides() {
+  if (coverOverridesCache) {
+    return coverOverridesCache;
+  }
+
   try {
-    const res = await fetch(
-      '/api/cover-overrides?ts=' + Date.now(),
-      {
-        cache: 'no-store'
-      }
-    );
+    const res = await fetch('/api/cover-overrides');
 
     if (!res.ok) {
-      throw new Error('HTTP ' + res.status);
+      throw new Error(`HTTP ${res.status}`);
     }
 
     const rows = await res.json();
@@ -208,13 +207,15 @@ export async function fetchCoverOverrides() {
       }
 
       if (item.slug) {
-        map['slug:' + item.slug] = index;
+        map[`slug:${item.slug}`] = index;
       }
 
       if (item.sourceUrl) {
-        map['source:' + item.sourceUrl] = index;
+        map[`source:${item.sourceUrl}`] = index;
       }
     }
+
+    coverOverridesCache = map;
 
     return map;
   } catch (err) {
@@ -223,54 +224,18 @@ export async function fetchCoverOverrides() {
       err.message
     );
 
-    return {};
+    coverOverridesCache = {};
+
+    return coverOverridesCache;
   }
 }
-
-function applyCoverOverride(product, overrides) {
-  if (
-    !product ||
-    !Array.isArray(product.images) ||
-    product.images.length === 0
-  ) {
-    return product;
-  }
-
-  const index =
-    overrides['slug:' + (product.slug || '')] ??
-    overrides['source:' + (product.sourceUrl || '')];
-
-  if (
-    !Number.isInteger(index) ||
-    index < 0 ||
-    index >= product.images.length
-  ) {
-    return product;
-  }
-
-  return {
-    ...product,
-    mainImageIndex: index,
-    coverOverrideIndex: index
-  };
-}
-
 export async function fetchCategoryProducts(catSlug) {
   const cleanSlug = slugify(catSlug);
   const resolvedSlug =
     CATEGORY_SLUG_ALIASES[cleanSlug] || cleanSlug;
 
   if (categoryCache.has(resolvedSlug)) {
-    const cached = categoryCache.get(resolvedSlug);
-    const overrides = await fetchCoverOverrides();
-
-    const refreshed = cached.map(product =>
-      applyCoverOverride(product, overrides)
-    );
-
-    categoryCache.set(resolvedSlug, refreshed);
-
-    return refreshed;
+    return categoryCache.get(resolvedSlug);
   }
 
   const manifest = await fetchManifest();
@@ -282,7 +247,7 @@ export async function fetchCategoryProducts(catSlug) {
   );
 
   const chunks =
-    catMeta?.chunks || [`${resolvedSlug}.json`];
+    catMeta?.chunks || [resolvedSlug + '.json'];
 
   const coverOverrides =
     await fetchCoverOverrides();
@@ -302,15 +267,21 @@ export async function fetchCategoryProducts(catSlug) {
 
   for (const chunk of chunks) {
     try {
-      const res = await fetch(
-        `${import.meta.env.BASE_URL}data/catalog/${chunk}`
+      const response = await fetch(
+        import.meta.env.BASE_URL +
+        'data/catalog/' +
+        chunk
       );
 
-      if (!res.ok) continue;
+      if (!response.ok) {
+        continue;
+      }
 
-      const items = await res.json();
+      const items = await response.json();
 
-      if (!Array.isArray(items)) continue;
+      if (!Array.isArray(items)) {
+        continue;
+      }
 
       for (let i = 0; i < items.length; i++) {
         const raw = items[i];
@@ -321,16 +292,8 @@ export async function fetchCategoryProducts(catSlug) {
           {};
 
         const serverIndex =
-          coverOverrides[`slug:${raw.slug}`] ??
-          coverOverrides[`source:${raw.sourceUrl || ''}`];
-
-        const product = {
-          id: raw.slug || raw.id || String(i),
-          ...raw,
-          ...localOverride,
-          published: raw.published !== false,
-          status: raw.status || 'published'
-        };
+          coverOverrides['slug:' + (raw.slug || '')] ??
+          coverOverrides['source:' + (raw.sourceUrl || '')];
 
         const rawIndex =
           raw.mainImageIndex !== undefined &&
@@ -341,27 +304,34 @@ export async function fetchCategoryProducts(catSlug) {
         const effectiveIndex =
           Number.isInteger(serverIndex)
             ? serverIndex
-            : (
-                Number.isInteger(localOverride.mainImageIndex)
-                  ? Number(localOverride.mainImageIndex)
-                  : (
-                      Number.isInteger(rawIndex)
-                        ? rawIndex
-                        : 0
-                    )
-              );
+            : Number.isInteger(localOverride.mainImageIndex)
+              ? Number(localOverride.mainImageIndex)
+              : Number.isInteger(rawIndex)
+                ? rawIndex
+                : 0;
 
-        product.mainImageIndex =
-          Number.isInteger(effectiveIndex) &&
-          effectiveIndex >= 0 &&
-          effectiveIndex < product.images.length
-            ? effectiveIndex
-            : 0;
+        const images =
+          Array.isArray(raw.images)
+            ? raw.images
+            : [];
 
-        product.coverOverrideIndex =
-          Number.isInteger(serverIndex)
-            ? serverIndex
-            : null;
+        const product = {
+          id: raw.slug || raw.id || String(i),
+          ...raw,
+          ...localOverride,
+          published: raw.published !== false,
+          status: raw.status || 'published',
+          mainImageIndex:
+            Number.isInteger(effectiveIndex) &&
+            effectiveIndex >= 0 &&
+            effectiveIndex < images.length
+              ? effectiveIndex
+              : 0,
+          coverOverrideIndex:
+            Number.isInteger(serverIndex)
+              ? serverIndex
+              : null
+        };
 
         combinedItems.push(product);
 
@@ -372,10 +342,10 @@ export async function fetchCategoryProducts(catSlug) {
           );
         }
       }
-    } catch (e) {
+    } catch (err) {
       console.warn(
-        `[productService] Falha ao carregar chunk ${chunk}:`,
-        e.message
+        '[productService] Falha ao carregar chunk ' + chunk + ':',
+        err.message
       );
     }
   }
@@ -468,7 +438,6 @@ export const productService = {
 
         if (result?.data) {
           const enriched = [];
-          const coverOverrides = await fetchCoverOverrides();
 
           for (const p of result.data) {
             let canonical = null;
@@ -477,40 +446,15 @@ export const productService = {
               const manifest = await fetchManifest();
               const mapping = manifest.slugMap?.[p.slug];
 
-              const inferredCategory = inferCategory(p);
-              const rawCategory = String(p.category || '');
+              if (mapping?.categorySlug) {
+                const items = await fetchCategoryProducts(
+                  mapping.categorySlug
+                );
 
-              const candidates = [
-                mapping?.categorySlug,
-                inferredCategory ? slugify(inferredCategory) : null,
-                slugify(rawCategory)
-              ].filter(Boolean);
-
-              // A API pode entregar "TÃªnis Esportivos" por causa
-              // da codificação antiga; o catálogo usa "tenis-esportivos".
-              if (/nis\s+esportivos/i.test(rawCategory)) {
-                candidates.push('tenis-esportivos');
-              }
-
-              const uniqueCandidates = [...new Set(candidates)];
-
-              for (const categorySlug of uniqueCandidates) {
-                try {
-                  const items = await fetchCategoryProducts(categorySlug);
-
-                  canonical =
-                    items.find(
-                      item => item.slug === p.slug
-                    ) || null;
-
-                  if (canonical) break;
-                } catch (e) {
-                  console.warn(
-                    '[productService] Falha ao buscar capa canônica:',
-                    categorySlug,
-                    e.message
-                  );
-                }
+                canonical =
+                  items.find(
+                    item => item.slug === p.slug
+                  ) || null;
               }
             } catch (e) {
               console.warn(
@@ -520,54 +464,14 @@ export const productService = {
               );
             }
 
-            let localOverride = null;
-
-            try {
-              const savedLocal = localStorage.getItem('ln_sports_admin_edits');
-
-              if (savedLocal) {
-                const localEdits = JSON.parse(savedLocal);
-                const localEntry =
-                  localEdits[p.sourceUrl] ||
-                  localEdits[p.slug] ||
-                  null;
-
-                const localIndex = Number(localEntry?.mainImageIndex);
-
-                if (
-                  Number.isInteger(localIndex) &&
-                  localIndex >= 0
-                ) {
-                  localOverride = localIndex;
-                }
-              }
-            } catch (e) {
-              console.warn(
-                '[productService] Falha ao ler override local do Admin:',
-                e.message
-              );
-            }
-
-            const apiOverride = Number(p.coverOverrideIndex);
-
-            const serverOverride =
-              Number.isInteger(apiOverride) && apiOverride >= 0
-                ? apiOverride
-                : (
-                    coverOverrides[`slug:${p.slug}`] ??
-                    coverOverrides[`source:${p.sourceUrl || ''}`] ??
-                    null
-                  );
-
             const overrideIndex =
-              localOverride ??
-              serverOverride ??
-              null;
+              Number.isInteger(p.coverOverrideIndex)
+                ? p.coverOverrideIndex
+                : null;
 
             enriched.push({
               ...p,
               category: inferCategory(p),
-              coverOverrideIndex: overrideIndex,
               mainImageIndex:
                 overrideIndex ??
                 canonical?.mainImageIndex ??
@@ -620,51 +524,19 @@ export const productService = {
       else if (sortBy === 'name-desc') matched.sort((a, b) => b.name.localeCompare(a.name));
 
       const offset = (page - 1) * limitCount;
-      const selected = matched.slice(
-        offset,
-        offset + limitCount
-      );
-
-      const sliced =
-        await Promise.all(
-          selected.map(async item => {
-            try {
-              const full =
-                await this.getProductBySlug(
-                  item.slug
-                );
-
-              if (full) {
-                return full;
-              }
-            } catch (err) {
-              console.warn(
-                '[productService] Falha ao carregar resultado completo:',
-                item.slug,
-                err.message
-              );
-            }
-
-            return {
-              id: item.slug,
-              name: item.name,
-              slug: item.slug,
-              category: item.category,
-              subcategory:
-                item.subcategory || '',
-              images: item.image
-                ? [item.image]
-                : [],
-              mainImageIndex: 0,
-              featured:
-                Boolean(item.featured),
-              sourceUrl:
-                item.sourceUrl || '',
-              published: true,
-              status: 'published'
-            };
-          })
-        );
+      const sliced = matched.slice(offset, offset + limitCount).map(p => ({
+        id: p.slug,
+        name: p.name,
+        slug: p.slug,
+        category: p.category,
+        subcategory: p.subcategory || '',
+        images: p.image ? [p.image] : [],
+        mainImageIndex: 0,
+        featured: Boolean(p.featured),
+        sourceUrl: p.sourceUrl || '',
+        published: true,
+        status: 'published'
+      }));
 
       return {
         data: sliced,
@@ -678,48 +550,24 @@ export const productService = {
     // 2. Busca por categoria
     if (category) {
       const catSlug = slugify(category);
-      const resolvedSlug =
-        CATEGORY_SLUG_ALIASES[catSlug] || catSlug;
-
-
-      // Fallback para o catálogo estático.
+      const resolvedSlug = CATEGORY_SLUG_ALIASES[catSlug] || catSlug;
       let items = await fetchCategoryProducts(resolvedSlug);
 
       if (status && status !== 'all') {
         items = items.filter(p => p.status === status);
       }
-
       if (subcategory) {
         const subNorm = normalizeStr(subcategory);
         const subSlug = slugify(subcategory);
-
-        items = items.filter(
-          p =>
-            p.subcategory &&
-            (
-              normalizeStr(p.subcategory) === subNorm ||
-              slugify(p.subcategory) === subSlug
-            )
-        );
+        items = items.filter(p => p.subcategory && (normalizeStr(p.subcategory) === subNorm || slugify(p.subcategory) === subSlug));
       }
-
       if (featured !== null) {
-        items = items.filter(
-          p => Boolean(p.featured) === Boolean(featured)
-        );
+        items = items.filter(p => Boolean(p.featured) === Boolean(featured));
       }
 
-      if (sortBy === 'name-asc') {
-        items.sort((a, b) => a.name.localeCompare(b.name));
-      } else if (sortBy === 'name-desc') {
-        items.sort((a, b) => b.name.localeCompare(a.name));
-      } else {
-        items.sort(
-          (a, b) =>
-            new Date(b.createdAt || 0) -
-            new Date(a.createdAt || 0)
-        );
-      }
+      if (sortBy === 'name-asc') items.sort((a, b) => a.name.localeCompare(b.name));
+      else if (sortBy === 'name-desc') items.sort((a, b) => b.name.localeCompare(a.name));
+      else items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
       const offset = (page - 1) * limitCount;
       const sliced = items.slice(offset, offset + limitCount);
@@ -729,24 +577,13 @@ export const productService = {
         total: items.length,
         page,
         totalPages: Math.ceil(items.length / limitCount),
-        limit: limitCount
+        limit: limitCount,
       };
     }
 
     // 3. CatÃ¡logo geral / PÃ¡gina inicial (produtos recentes)
     const manifest = await fetchManifest();
-    let generalItems = [...(manifest.homeRecent || [])];
-
-    const homeCoverOverrides =
-      await fetchCoverOverrides();
-
-    generalItems =
-      generalItems.map(product =>
-        applyCoverOverride(
-          product,
-          homeCoverOverrides
-        )
-      );
+    let generalItems = manifest.homeRecent || [];
 
     if (generalItems.length === 0) {
       generalItems = await fetchCategoryProducts('camisetas-de-time');
@@ -803,75 +640,107 @@ export const productService = {
   async getProductBySlug(slug) {
     if (!slug) return null;
 
-    const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
-    if (true) {
+    const isAdmin =
+      Boolean(
+        sessionStorage.getItem(
+          'ln_sports_admin_token'
+        )
+      );
+
+    if (isAdmin) {
       try {
-        const product = await apiFetch(`/api/products/${slug}`);
-        if (product) return { ...product, category: inferCategory(product) };
+        const product =
+          await apiFetch(
+            '/api/products/' + slug
+          );
+
+        if (product) {
+          return {
+            ...product,
+            category: inferCategory(product)
+          };
+        }
       } catch (err) {
-        console.warn('[productService] Fallback local para slug:', err.message);
+        console.warn(
+          '[productService] Fallback local para slug:',
+          err.message
+        );
       }
     }
 
-    // 1. Verifica se jÃ¡ estÃ¡ em memÃ³ria
-    if (productBySlugCache.has(slug)) {
-      const cached = productBySlugCache.get(slug);
-      const overrides = await fetchCoverOverrides();
+    const manifest =
+      await fetchManifest();
 
-      const serverIndex =
-        overrides[`slug:${cached.slug}`] ??
-        overrides[`source:${cached.sourceUrl || ''}`];
+    const mapping =
+      manifest.slugMap?.[slug];
 
-      if (
-        Number.isInteger(serverIndex) &&
-        Array.isArray(cached.images) &&
-        serverIndex >= 0 &&
-        serverIndex < cached.images.length
-      ) {
-        return {
-          ...cached,
-          mainImageIndex: serverIndex,
-          coverOverrideIndex: serverIndex
-        };
-      }
+    if (mapping?.categorySlug) {
+      try {
+        const items =
+          await fetchCategoryProducts(
+            mapping.categorySlug
+          );
 
-      return cached;
-    }
+        const found =
+          items.find(
+            item => item.slug === slug
+          ) || null;
 
-    // 2. Consulta o manifest para descobrir em qual categoria/chunk estÃ¡ o produto
-    const manifest = await fetchManifest();
-    const mapping = manifest.slugMap ? manifest.slugMap[slug] : null;
-
-    if (mapping && mapping.categorySlug) {
-      await fetchCategoryProducts(mapping.categorySlug);
-      if (productBySlugCache.has(slug)) {
-        return productBySlugCache.get(slug);
+        if (found) {
+          return found;
+        }
+      } catch (err) {
+        console.warn(
+          '[productService] Falha ao carregar produto:',
+          err.message
+        );
       }
     }
 
-    // 3. Fallback: procura nos destaques/recentes do manifest
-    const fallbackList = [...(manifest.homeFeatured || []), ...(manifest.homeRecent || [])];
-    const foundFallback = fallbackList.find(p => p.slug === slug);
-    if (foundFallback) {
-      const overrides = await fetchCoverOverrides();
+    const overrides =
+      await fetchCoverOverrides();
 
-      const serverIndex =
-        overrides[`slug:${foundFallback.slug}`] ??
-        overrides[`source:${foundFallback.sourceUrl || ''}`];
+    const cached =
+      productBySlugCache.get(slug);
 
-      const result = {
-        ...foundFallback,
-        ...(Number.isInteger(serverIndex)
-          ? {
-              mainImageIndex: serverIndex,
-              coverOverrideIndex: serverIndex
-            }
-          : {})
-      };
+    if (cached) {
+      const updated =
+        applyCoverOverride(
+          cached,
+          overrides
+        );
 
-      productBySlugCache.set(slug, result);
+      productBySlugCache.set(
+        slug,
+        updated
+      );
 
-      return result;
+      return updated;
+    }
+
+    const fallbackList = [
+      ...(manifest.homeFeatured || []),
+      ...(manifest.homeRecent || [])
+    ];
+
+    const fallback =
+      fallbackList.find(
+        p => p.slug === slug
+      );
+
+    if (fallback) {
+      const updated =
+        applyCoverOverride(
+          fallback,
+          overrides
+        );
+
+      productBySlugCache.set(
+        slug,
+        updated
+      );
+
+      return updated;
     }
 
     return null;
@@ -1069,12 +938,5 @@ export const productService = {
     }
   },
 };
-
-
-
-
-
-
-
 
 

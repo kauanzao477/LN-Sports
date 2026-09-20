@@ -477,40 +477,15 @@ export const productService = {
               const manifest = await fetchManifest();
               const mapping = manifest.slugMap?.[p.slug];
 
-              const inferredCategory = inferCategory(p);
-              const rawCategory = String(p.category || '');
+              if (mapping?.categorySlug) {
+                const items = await fetchCategoryProducts(
+                  mapping.categorySlug
+                );
 
-              const candidates = [
-                mapping?.categorySlug,
-                inferredCategory ? slugify(inferredCategory) : null,
-                slugify(rawCategory)
-              ].filter(Boolean);
-
-              // A API pode entregar "TÃªnis Esportivos" por causa
-              // da codificação antiga; o catálogo usa "tenis-esportivos".
-              if (/nis\s+esportivos/i.test(rawCategory)) {
-                candidates.push('tenis-esportivos');
-              }
-
-              const uniqueCandidates = [...new Set(candidates)];
-
-              for (const categorySlug of uniqueCandidates) {
-                try {
-                  const items = await fetchCategoryProducts(categorySlug);
-
-                  canonical =
-                    items.find(
-                      item => item.slug === p.slug
-                    ) || null;
-
-                  if (canonical) break;
-                } catch (e) {
-                  console.warn(
-                    '[productService] Falha ao buscar capa canônica:',
-                    categorySlug,
-                    e.message
-                  );
-                }
+                canonical =
+                  items.find(
+                    item => item.slug === p.slug
+                  ) || null;
               }
             } catch (e) {
               console.warn(
@@ -520,37 +495,9 @@ export const productService = {
               );
             }
 
-            let localOverride = null;
-
-            try {
-              const savedLocal = localStorage.getItem('ln_sports_admin_edits');
-
-              if (savedLocal) {
-                const localEdits = JSON.parse(savedLocal);
-                const localEntry =
-                  localEdits[p.sourceUrl] ||
-                  localEdits[p.slug] ||
-                  null;
-
-                const localIndex = Number(localEntry?.mainImageIndex);
-
-                if (
-                  Number.isInteger(localIndex) &&
-                  localIndex >= 0
-                ) {
-                  localOverride = localIndex;
-                }
-              }
-            } catch (e) {
-              console.warn(
-                '[productService] Falha ao ler override local do Admin:',
-                e.message
-              );
-            }
-
             const apiOverride = Number(p.coverOverrideIndex);
 
-            const serverOverride =
+            const overrideIndex =
               Number.isInteger(apiOverride) && apiOverride >= 0
                 ? apiOverride
                 : (
@@ -558,11 +505,6 @@ export const productService = {
                     coverOverrides[`source:${p.sourceUrl || ''}`] ??
                     null
                   );
-
-            const overrideIndex =
-              localOverride ??
-              serverOverride ??
-              null;
 
             enriched.push({
               ...p,
@@ -1069,9 +1011,6 @@ export const productService = {
     }
   },
 };
-
-
-
 
 
 

@@ -12,7 +12,7 @@ import {
   Shirt,
   Image as ImageIcon
 } from 'lucide-react';
-import { productService, PRODUCTS_PER_PAGE, fetchCategoryProducts } from '../../services/productService';
+import { productService, PRODUCTS_PER_PAGE } from '../../services/productService';
 import { categoryService } from '../../services/categoryService';
 import { ProductImage } from '../../components/product/ProductImage';
 
@@ -50,95 +50,7 @@ export function AdminProductsPage() {
         category: selectedCategory || null,
         sortBy: 'newest'
       });
-      const apiProducts = res.data || [];
-
-      const syncedProducts = await Promise.all(
-        apiProducts.map(async (product) => {
-          let canonical = null;
-
-          const categoryCandidates = [
-            product.category,
-            product.originalCategory
-          ].filter(Boolean);
-
-          if (
-            /nis\s+esportivos/i.test(
-              String(product.category || '')
-            ) ||
-            /nis\s+esportivos/i.test(
-              String(product.originalCategory || '')
-            )
-          ) {
-            categoryCandidates.push('tenis-esportivos');
-          }
-
-          for (
-            const categoryCandidate of [
-              ...new Set(categoryCandidates)
-            ]
-          ) {
-            try {
-              const categoryProducts =
-                await fetchCategoryProducts(categoryCandidate);
-
-              canonical =
-                categoryProducts.find(
-                  item => item.slug === product.slug
-                ) || null;
-
-              if (canonical) break;
-            } catch (e) {}
-          }
-
-          if (!canonical) {
-            return product;
-          }
-
-          const images =
-            Array.isArray(canonical.images) &&
-            canonical.images.length > 0
-              ? canonical.images
-              : product.images;
-
-          let mainImageIndex =
-            Number.isInteger(
-              Number(canonical.mainImageIndex)
-            )
-              ? Number(canonical.mainImageIndex)
-              : Number.isInteger(
-                  Number(product.mainImageIndex)
-                )
-                  ? Number(product.mainImageIndex)
-                  : 0;
-
-          if (
-            !Array.isArray(images) ||
-            images.length === 0 ||
-            mainImageIndex < 0 ||
-            mainImageIndex >= images.length
-          ) {
-            mainImageIndex = 0;
-          }
-
-          return {
-            ...product,
-
-            // Mesmas imagens usadas pela categoria publica.
-            images,
-
-            // Mesma capa usada pela categoria publica.
-            mainImageIndex,
-
-            // Preserva o override salvo no servidor.
-            coverOverrideIndex:
-              canonical.coverOverrideIndex ??
-              product.coverOverrideIndex ??
-              null
-          };
-        })
-      );
-
-      setProducts(syncedProducts);
+      setProducts(res.data || []);
       setTotalPages(res.totalPages || 1);
       setTotalCount(res.total || 0);
     } catch (err) {
@@ -493,7 +405,6 @@ export function AdminProductsPage() {
     </div>
   );
 }
-
 
 
 

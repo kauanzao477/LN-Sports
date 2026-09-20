@@ -13,7 +13,7 @@ export async function onRequestGet(context) {
           source_url,
           cover_override_index
         FROM products
-        WHERE cover_override_index IS NOT NULL AND NOW() IS NOT NULL
+        WHERE cover_override_index IS NOT NULL
       `);
 
       return result.rows;
@@ -69,4 +69,3 @@ export async function onRequestGet(context) {
     );
   }
 }
-

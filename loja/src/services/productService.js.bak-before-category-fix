@@ -468,7 +468,6 @@ export const productService = {
 
         if (result?.data) {
           const enriched = [];
-          const coverOverrides = await fetchCoverOverrides();
 
           for (const p of result.data) {
             let canonical = null;
@@ -477,40 +476,15 @@ export const productService = {
               const manifest = await fetchManifest();
               const mapping = manifest.slugMap?.[p.slug];
 
-              const inferredCategory = inferCategory(p);
-              const rawCategory = String(p.category || '');
+              if (mapping?.categorySlug) {
+                const items = await fetchCategoryProducts(
+                  mapping.categorySlug
+                );
 
-              const candidates = [
-                mapping?.categorySlug,
-                inferredCategory ? slugify(inferredCategory) : null,
-                slugify(rawCategory)
-              ].filter(Boolean);
-
-              // A API pode entregar "TÃªnis Esportivos" por causa
-              // da codificação antiga; o catálogo usa "tenis-esportivos".
-              if (/nis\s+esportivos/i.test(rawCategory)) {
-                candidates.push('tenis-esportivos');
-              }
-
-              const uniqueCandidates = [...new Set(candidates)];
-
-              for (const categorySlug of uniqueCandidates) {
-                try {
-                  const items = await fetchCategoryProducts(categorySlug);
-
-                  canonical =
-                    items.find(
-                      item => item.slug === p.slug
-                    ) || null;
-
-                  if (canonical) break;
-                } catch (e) {
-                  console.warn(
-                    '[productService] Falha ao buscar capa canônica:',
-                    categorySlug,
-                    e.message
-                  );
-                }
+                canonical =
+                  items.find(
+                    item => item.slug === p.slug
+                  ) || null;
               }
             } catch (e) {
               console.warn(
@@ -520,54 +494,14 @@ export const productService = {
               );
             }
 
-            let localOverride = null;
-
-            try {
-              const savedLocal = localStorage.getItem('ln_sports_admin_edits');
-
-              if (savedLocal) {
-                const localEdits = JSON.parse(savedLocal);
-                const localEntry =
-                  localEdits[p.sourceUrl] ||
-                  localEdits[p.slug] ||
-                  null;
-
-                const localIndex = Number(localEntry?.mainImageIndex);
-
-                if (
-                  Number.isInteger(localIndex) &&
-                  localIndex >= 0
-                ) {
-                  localOverride = localIndex;
-                }
-              }
-            } catch (e) {
-              console.warn(
-                '[productService] Falha ao ler override local do Admin:',
-                e.message
-              );
-            }
-
-            const apiOverride = Number(p.coverOverrideIndex);
-
-            const serverOverride =
-              Number.isInteger(apiOverride) && apiOverride >= 0
-                ? apiOverride
-                : (
-                    coverOverrides[`slug:${p.slug}`] ??
-                    coverOverrides[`source:${p.sourceUrl || ''}`] ??
-                    null
-                  );
-
             const overrideIndex =
-              localOverride ??
-              serverOverride ??
-              null;
+              Number.isInteger(p.coverOverrideIndex)
+                ? p.coverOverrideIndex
+                : null;
 
             enriched.push({
               ...p,
               category: inferCategory(p),
-              coverOverrideIndex: overrideIndex,
               mainImageIndex:
                 overrideIndex ??
                 canonical?.mainImageIndex ??
@@ -681,6 +615,60 @@ export const productService = {
       const resolvedSlug =
         CATEGORY_SLUG_ALIASES[catSlug] || catSlug;
 
+      // Primeiro tenta a API pública para receber a capa atual do Neon.
+      try {
+        const params = new URLSearchParams();
+        params.set('page', page);
+        params.set('limit', limitCount);
+        params.set('status', 'published');
+        params.set('category', category);
+
+        if (subcategory) {
+          params.set('subcategory', subcategory);
+        }
+
+        if (featured !== null) {
+          params.set('featured', featured);
+        }
+
+        if (sortBy) {
+          params.set(
+            'sort',
+            sortBy === 'newest' ? 'newest' : sortBy
+          );
+        }
+
+        const apiRes = await fetch(
+          apiUrl(`/api/products?${params.toString()}`),
+          { cache: 'no-store' }
+        );
+
+        if (apiRes.ok) {
+          const apiData = await apiRes.json();
+
+          if (Array.isArray(apiData?.data)) {
+            const overrides = await fetchCoverOverrides();
+
+            const liveItems = apiData.data.map(product =>
+              applyCoverOverride(product, overrides)
+            );
+
+            return {
+              ...apiData,
+              data: liveItems
+            };
+          }
+        }
+
+        console.warn(
+          '[productService] API pública de categoria indisponível; usando catálogo estático.'
+        );
+      } catch (err) {
+        console.warn(
+          '[productService] Falha na API pública da categoria; usando catálogo estático:',
+          err?.message || err
+        );
+      }
 
       // Fallback para o catálogo estático.
       let items = await fetchCategoryProducts(resolvedSlug);
@@ -1069,11 +1057,6 @@ export const productService = {
     }
   },
 };
-
-
-
-
-
 
 
 

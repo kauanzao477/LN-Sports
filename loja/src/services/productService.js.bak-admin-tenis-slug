@@ -478,39 +478,23 @@ export const productService = {
               const mapping = manifest.slugMap?.[p.slug];
 
               const inferredCategory = inferCategory(p);
-              const rawCategory = String(p.category || '');
+              const fallbackCategorySlug = inferredCategory
+                ? slugify(inferredCategory)
+                : null;
 
-              const candidates = [
-                mapping?.categorySlug,
-                inferredCategory ? slugify(inferredCategory) : null,
-                slugify(rawCategory)
-              ].filter(Boolean);
+              const canonicalCategorySlug =
+                mapping?.categorySlug ||
+                fallbackCategorySlug;
 
-              // A API pode entregar "TÃªnis Esportivos" por causa
-              // da codificação antiga; o catálogo usa "tenis-esportivos".
-              if (/nis\s+esportivos/i.test(rawCategory)) {
-                candidates.push('tenis-esportivos');
-              }
+              if (canonicalCategorySlug) {
+                const items = await fetchCategoryProducts(
+                  canonicalCategorySlug
+                );
 
-              const uniqueCandidates = [...new Set(candidates)];
-
-              for (const categorySlug of uniqueCandidates) {
-                try {
-                  const items = await fetchCategoryProducts(categorySlug);
-
-                  canonical =
-                    items.find(
-                      item => item.slug === p.slug
-                    ) || null;
-
-                  if (canonical) break;
-                } catch (e) {
-                  console.warn(
-                    '[productService] Falha ao buscar capa canônica:',
-                    categorySlug,
-                    e.message
-                  );
-                }
+                canonical =
+                  items.find(
+                    item => item.slug === p.slug
+                  ) || null;
               }
             } catch (e) {
               console.warn(
@@ -1069,7 +1053,6 @@ export const productService = {
     }
   },
 };
-
 
 
 

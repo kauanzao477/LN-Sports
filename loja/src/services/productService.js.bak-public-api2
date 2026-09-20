@@ -468,7 +468,6 @@ export const productService = {
 
         if (result?.data) {
           const enriched = [];
-          const coverOverrides = await fetchCoverOverrides();
 
           for (const p of result.data) {
             let canonical = null;
@@ -477,40 +476,15 @@ export const productService = {
               const manifest = await fetchManifest();
               const mapping = manifest.slugMap?.[p.slug];
 
-              const inferredCategory = inferCategory(p);
-              const rawCategory = String(p.category || '');
+              if (mapping?.categorySlug) {
+                const items = await fetchCategoryProducts(
+                  mapping.categorySlug
+                );
 
-              const candidates = [
-                mapping?.categorySlug,
-                inferredCategory ? slugify(inferredCategory) : null,
-                slugify(rawCategory)
-              ].filter(Boolean);
-
-              // A API pode entregar "TÃªnis Esportivos" por causa
-              // da codificação antiga; o catálogo usa "tenis-esportivos".
-              if (/nis\s+esportivos/i.test(rawCategory)) {
-                candidates.push('tenis-esportivos');
-              }
-
-              const uniqueCandidates = [...new Set(candidates)];
-
-              for (const categorySlug of uniqueCandidates) {
-                try {
-                  const items = await fetchCategoryProducts(categorySlug);
-
-                  canonical =
-                    items.find(
-                      item => item.slug === p.slug
-                    ) || null;
-
-                  if (canonical) break;
-                } catch (e) {
-                  console.warn(
-                    '[productService] Falha ao buscar capa canônica:',
-                    categorySlug,
-                    e.message
-                  );
-                }
+                canonical =
+                  items.find(
+                    item => item.slug === p.slug
+                  ) || null;
               }
             } catch (e) {
               console.warn(
@@ -520,54 +494,14 @@ export const productService = {
               );
             }
 
-            let localOverride = null;
-
-            try {
-              const savedLocal = localStorage.getItem('ln_sports_admin_edits');
-
-              if (savedLocal) {
-                const localEdits = JSON.parse(savedLocal);
-                const localEntry =
-                  localEdits[p.sourceUrl] ||
-                  localEdits[p.slug] ||
-                  null;
-
-                const localIndex = Number(localEntry?.mainImageIndex);
-
-                if (
-                  Number.isInteger(localIndex) &&
-                  localIndex >= 0
-                ) {
-                  localOverride = localIndex;
-                }
-              }
-            } catch (e) {
-              console.warn(
-                '[productService] Falha ao ler override local do Admin:',
-                e.message
-              );
-            }
-
-            const apiOverride = Number(p.coverOverrideIndex);
-
-            const serverOverride =
-              Number.isInteger(apiOverride) && apiOverride >= 0
-                ? apiOverride
-                : (
-                    coverOverrides[`slug:${p.slug}`] ??
-                    coverOverrides[`source:${p.sourceUrl || ''}`] ??
-                    null
-                  );
-
             const overrideIndex =
-              localOverride ??
-              serverOverride ??
-              null;
+              Number.isInteger(p.coverOverrideIndex)
+                ? p.coverOverrideIndex
+                : null;
 
             enriched.push({
               ...p,
               category: inferCategory(p),
-              coverOverrideIndex: overrideIndex,
               mainImageIndex:
                 overrideIndex ??
                 canonical?.mainImageIndex ??
@@ -678,48 +612,24 @@ export const productService = {
     // 2. Busca por categoria
     if (category) {
       const catSlug = slugify(category);
-      const resolvedSlug =
-        CATEGORY_SLUG_ALIASES[catSlug] || catSlug;
-
-
-      // Fallback para o catálogo estático.
+      const resolvedSlug = CATEGORY_SLUG_ALIASES[catSlug] || catSlug;
       let items = await fetchCategoryProducts(resolvedSlug);
 
       if (status && status !== 'all') {
         items = items.filter(p => p.status === status);
       }
-
       if (subcategory) {
         const subNorm = normalizeStr(subcategory);
         const subSlug = slugify(subcategory);
-
-        items = items.filter(
-          p =>
-            p.subcategory &&
-            (
-              normalizeStr(p.subcategory) === subNorm ||
-              slugify(p.subcategory) === subSlug
-            )
-        );
+        items = items.filter(p => p.subcategory && (normalizeStr(p.subcategory) === subNorm || slugify(p.subcategory) === subSlug));
       }
-
       if (featured !== null) {
-        items = items.filter(
-          p => Boolean(p.featured) === Boolean(featured)
-        );
+        items = items.filter(p => Boolean(p.featured) === Boolean(featured));
       }
 
-      if (sortBy === 'name-asc') {
-        items.sort((a, b) => a.name.localeCompare(b.name));
-      } else if (sortBy === 'name-desc') {
-        items.sort((a, b) => b.name.localeCompare(a.name));
-      } else {
-        items.sort(
-          (a, b) =>
-            new Date(b.createdAt || 0) -
-            new Date(a.createdAt || 0)
-        );
-      }
+      if (sortBy === 'name-asc') items.sort((a, b) => a.name.localeCompare(b.name));
+      else if (sortBy === 'name-desc') items.sort((a, b) => b.name.localeCompare(a.name));
+      else items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
       const offset = (page - 1) * limitCount;
       const sliced = items.slice(offset, offset + limitCount);
@@ -729,7 +639,7 @@ export const productService = {
         total: items.length,
         page,
         totalPages: Math.ceil(items.length / limitCount),
-        limit: limitCount
+        limit: limitCount,
       };
     }
 
@@ -804,7 +714,7 @@ export const productService = {
     if (!slug) return null;
 
     const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
-    if (true) {
+    if (isAdmin) {
       try {
         const product = await apiFetch(`/api/products/${slug}`);
         if (product) return { ...product, category: inferCategory(product) };
@@ -1069,12 +979,5 @@ export const productService = {
     }
   },
 };
-
-
-
-
-
-
-
 
 
