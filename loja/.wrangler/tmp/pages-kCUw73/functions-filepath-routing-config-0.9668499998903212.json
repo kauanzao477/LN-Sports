@@ -1,0 +1,229 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/admin/products/:id/cover",
+      "mountPath": "/api/admin/products/:id",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/products/[id]/cover.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id/cover",
+      "mountPath": "/api/admin/products/:id",
+      "method": "PATCH",
+      "module": [
+        "api/admin/products/[id]/cover.js:onRequestPatch"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id/featured",
+      "mountPath": "/api/admin/products/:id",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/products/[id]/featured.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id/featured",
+      "mountPath": "/api/admin/products/:id",
+      "method": "PATCH",
+      "module": [
+        "api/admin/products/[id]/featured.js:onRequestPatch"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id/main-image",
+      "mountPath": "/api/admin/products/:id",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/products/[id]/main-image.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id/main-image",
+      "mountPath": "/api/admin/products/:id",
+      "method": "PATCH",
+      "module": [
+        "api/admin/products/[id]/main-image.js:onRequestPatch"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id/publish",
+      "mountPath": "/api/admin/products/:id",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/products/[id]/publish.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id/publish",
+      "mountPath": "/api/admin/products/:id",
+      "method": "PATCH",
+      "module": [
+        "api/admin/products/[id]/publish.js:onRequestPatch"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id",
+      "mountPath": "/api/admin/products",
+      "method": "DELETE",
+      "module": [
+        "api/admin/products/[id].js:onRequestDelete"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id",
+      "mountPath": "/api/admin/products",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/products/[id].js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/products/:id",
+      "mountPath": "/api/admin/products",
+      "method": "PUT",
+      "module": [
+        "api/admin/products/[id].js:onRequestPut"
+      ]
+    },
+    {
+      "routePath": "/api/admin/categories",
+      "mountPath": "/api/admin",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/categories.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/categories",
+      "mountPath": "/api/admin",
+      "method": "PUT",
+      "module": [
+        "api/admin/categories.js:onRequestPut"
+      ]
+    },
+    {
+      "routePath": "/api/admin/dashboard",
+      "mountPath": "/api/admin",
+      "method": "GET",
+      "module": [
+        "api/admin/dashboard.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/admin/dashboard",
+      "mountPath": "/api/admin",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/dashboard.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/login",
+      "mountPath": "/api/admin",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/login.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/login",
+      "mountPath": "/api/admin",
+      "method": "POST",
+      "module": [
+        "api/admin/login.js:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/admin/settings",
+      "mountPath": "/api/admin",
+      "method": "OPTIONS",
+      "module": [
+        "api/admin/settings.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/admin/settings",
+      "mountPath": "/api/admin",
+      "method": "PUT",
+      "module": [
+        "api/admin/settings.js:onRequestPut"
+      ]
+    },
+    {
+      "routePath": "/api/products/:slug",
+      "mountPath": "/api/products",
+      "method": "GET",
+      "module": [
+        "api/products/[slug].js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/products/:slug",
+      "mountPath": "/api/products",
+      "method": "OPTIONS",
+      "module": [
+        "api/products/[slug].js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/categories",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/categories.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/categories",
+      "mountPath": "/api",
+      "method": "OPTIONS",
+      "module": [
+        "api/categories.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/products",
+      "mountPath": "/api/products",
+      "method": "GET",
+      "module": [
+        "api/products/index.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/products",
+      "mountPath": "/api/products",
+      "method": "OPTIONS",
+      "module": [
+        "api/products/index.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/settings",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/settings.js:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/api/settings",
+      "mountPath": "/api",
+      "method": "OPTIONS",
+      "module": [
+        "api/settings.js:onRequestOptions"
+      ]
+    },
+    {
+      "routePath": "/api/image-proxy",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/image-proxy.js:onRequest"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}
