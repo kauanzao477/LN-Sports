@@ -60,7 +60,6 @@ export async function onRequestPut(context) {
     
     // Salva explicitamente a capa escolhida no Neon
     if (mainImageIndex !== undefined) {
-        await client.query('UPDATE products SET main_image_index = await client.query(`
         UPDATE store_settings SET
           store_name               = COALESCE($1, store_name),
           whatsapp_number          = COALESCE($2, whatsapp_number),
