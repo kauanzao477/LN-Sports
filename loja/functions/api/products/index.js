@@ -69,23 +69,23 @@ export async function onRequestGet(context) {
 
       return {
         data: dataRes.rows.map(rowToProduct),
-        pagination: {
+        
           page,
           limit,
           total,
           totalPages: Math.ceil(total / limit),
           hasMore: offset + limit < total,
-        },
+        ,
       };
     });
 
     return jsonResponse(result);
   } catch (err) {
-    console.warn('[Pages Functions GET /api/products] DB query error:', err.message);
-    return jsonResponse({
-      data: [],
-      pagination: { page: 1, limit, total: 0, totalPages: 0, hasMore: false },
-      warning: 'Banco não acessível, utilize catálogo estático',
+    console.error('Database Error:', err);
+    return new Response(JSON.stringify({ error: 'Erro interno ao consultar o banco de dados.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
     });
+  });
   }
 }

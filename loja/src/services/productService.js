@@ -320,7 +320,8 @@ export const productService = {
         }
         return result;
       } catch (err) {
-        console.warn('[productService] API admin indisponível, usando catálogo estático:', err.message);
+        console.error('[productService] ERRO CRÍTICO na API do Admin:', err.message);
+        throw err; // Propaga erro, SEM fallback para estático
       }
     }
 
