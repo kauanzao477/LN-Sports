@@ -1,22 +1,22 @@
-﻿/**
- * ServiÃ§o de Produtos da LN SPORTS.
+/**
+ * Serviço de Produtos da LN SPORTS.
  * Consome a API REST do server.js (Node/Express + PostgreSQL).
  * O React nunca acessa o banco diretamente.
  *
- * Fallback: usa produtos.json / INITIAL_DEMO_PRODUCTS quando a API nÃ£o estÃ¡ disponÃ­vel.
+ * Fallback: usa produtos.json / INITIAL_DEMO_PRODUCTS quando a API não está disponível.
  */
 import { slugify } from '../utils/slugify';
 import { resolveCoverIndex } from '../utils/coverUtils';
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Demo products (fallback quando API e JSON nÃ£o disponÃ­veis)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo products (fallback quando API e JSON não disponíveis)
+// ─────────────────────────────────────────────────────────────────────────────
 const INITIAL_DEMO_PRODUCTS = [
   {
     id: 'demo-1',
     name: 'Spain 2026 2 Stars Special Edition Jersey - Blue S-4XL',
     slug: 'spain-2026-2-stars-special-edition-jersey-blue-s-4xl',
-    category: 'SeleÃ§Ãµes',
+    category: 'Seleções',
     subcategory: 'Espanha',
     images: [
       'https://photo.yupoo.com/minkang/fe887e57fa/0755eab0.png',
@@ -24,7 +24,7 @@ const INITIAL_DEMO_PRODUCTS = [
     ],
     sourceUrl: 'https://minkang.x.yupoo.com/albums/248186871?uid=1',
     sourceProvider: 'yupoo',
-    description: 'Camisa EdiÃ§Ã£o Especial Espanha 2026 2-Star na cor azul.',
+    description: 'Camisa Edição Especial Espanha 2026 2-Star na cor azul.',
     published: true, featured: true, status: 'published',
     createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
     updatedAt: new Date().toISOString()
@@ -33,7 +33,7 @@ const INITIAL_DEMO_PRODUCTS = [
     id: 'demo-2',
     name: 'Spain 2026 Special Edition 2-Star - Red Jersey S-4XL',
     slug: 'spain-2026-special-edition-2-star-red-jersey-s-4xl',
-    category: 'SeleÃ§Ãµes',
+    category: 'Seleções',
     subcategory: 'Espanha',
     images: [
       'https://photo.yupoo.com/minkang/f7b1b4cbe1/c753afc3.jpg',
@@ -48,47 +48,47 @@ const INITIAL_DEMO_PRODUCTS = [
   }
 ];
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// UtilitÃ¡rios
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilitários
+// ─────────────────────────────────────────────────────────────────────────────
 export function normalizeStr(str) {
   if (!str) return '';
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
-// Mapa de aliases internos -> nome pÃºblico (sem expor senha)
+// Mapa de aliases internos -> nome público (sem expor senha)
 const CATEGORY_ALIASES = {
-  'TÃªnis Casuais - Senha: HJH001077': 'TÃªnis Casuais',
-  'TÃªnis Esportivos - Senha: 888888':  'TÃªnis Esportivos',
-  'TÃªnis Esportivos - Senha: 888886':  'TÃªnis Esportivos',
+  'Tênis Casuais - Senha: HJH001077': 'Tênis Casuais',
+  'Tênis Esportivos - Senha: 888888':  'Tênis Esportivos',
+  'Tênis Esportivos - Senha: 888886':  'Tênis Esportivos',
 };
 
-// Inferir categoria a partir do sourceUrl (preserva lÃ³gica original)
+// Inferir categoria a partir do sourceUrl (preserva lógica original)
 export function inferCategory(product) {
   const url = product.sourceUrl || '';
   if (url.includes('lvguccinike.x.yupoo.com')) return 'Chuteiras';
   if (url.includes('ywq2000.x.yupoo.com')) return 'Chuteiras';
   if (url.includes('mzrycm102618.x.yupoo.com') && url.includes('/4742786')) return 'Chuteiras Infantil';
-  if (product.category === 'CatÃ¡logo de Chuteiras - 01' ||
-      product.category === 'CatÃ¡logo de Chuteiras - 02' ||
-      product.category === 'CatÃ¡logo de Chuteiras - 03') return 'Chuteiras';
-  if (product.category === 'CatÃ¡logo de Chuteiras - Infantil') return 'Chuteiras Infantil';
-  // Mapeia categorias internas (com senha) para nomes pÃºblicos
+  if (product.category === 'Catálogo de Chuteiras - 01' ||
+      product.category === 'Catálogo de Chuteiras - 02' ||
+      product.category === 'Catálogo de Chuteiras - 03') return 'Chuteiras';
+  if (product.category === 'Catálogo de Chuteiras - Infantil') return 'Chuteiras Infantil';
+  // Mapeia categorias internas (com senha) para nomes públicos
   if (CATEGORY_ALIASES[product.category]) return CATEGORY_ALIASES[product.category];
   return product.category;
 }
 
 // Time inference utilities (preservadas do original)
 const PREDEFINED_TEAMS = [
-  'Flamengo', 'Internacional', 'Palmeiras', 'Corinthians', 'SÃ£o Paulo', 'Santos',
-  'GrÃªmio', 'Cruzeiro', 'AtlÃ©tico-MG', 'Vasco', 'Botafogo', 'Fluminense',
-  'Bahia', 'Fortaleza', 'CearÃ¡', 'Sport', 'VitÃ³ria', 'Athletico-PR', 'Coritiba'
+  'Flamengo', 'Internacional', 'Palmeiras', 'Corinthians', 'São Paulo', 'Santos',
+  'Grêmio', 'Cruzeiro', 'Atlético-MG', 'Vasco', 'Botafogo', 'Fluminense',
+  'Bahia', 'Fortaleza', 'Ceará', 'Sport', 'Vitória', 'Athletico-PR', 'Coritiba'
 ];
 
 const TEAM_ALIASES = {
   'inter': 'Internacional',
-  'atletico mg': 'AtlÃ©tico-MG',
-  'atletico-mg': 'AtlÃ©tico-MG',
+  'atletico mg': 'Atlético-MG',
+  'atletico-mg': 'Atlético-MG',
   'athletico pr': 'Athletico-PR',
   'athletico-pr': 'Athletico-PR',
 };
@@ -126,15 +126,15 @@ export function getProductSubcategory(product, allProducts = []) {
   if (!product) return '';
   if (product.subcategory?.trim()) return normalizeStr(product.subcategory);
   const cat = product.category?.trim() || '';
-  if (cat === 'Camisetas de Time' || cat === 'Camisetas de Time RetrÃ´') {
+  if (cat === 'Camisetas de Time' || cat === 'Camisetas de Time Retrô') {
     return inferTeamFromName(product.name || '', allProducts);
   }
   return '';
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Determina base URL da API (permite VITE_API_URL para conectar ao Render)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 function apiUrl(path) {
   const customApi = import.meta.env.VITE_API_URL;
   if (customApi) {
@@ -143,9 +143,9 @@ function apiUrl(path) {
   return path;
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Cache e Loader do CatÃ¡logo EstÃ¡tico Particionado (Cloudflare Pages)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
+// Cache e Loader do Catálogo Estático Particionado (Cloudflare Pages)
+// ─────────────────────────────────────────────────────────────────────────────
 let manifestCache = null;
 let categoryCache = new Map();
 let productBySlugCache = new Map();
@@ -259,9 +259,9 @@ const CATEGORY_SLUG_ALIASES = {
   'tenis-esportivos-senha-888886': 'tenis-esportivos',
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // API helpers (usado apenas pelo painel admin no Render)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 async function apiFetch(path, opts = {}) {
   const token = sessionStorage.getItem('ln_sports_admin_token');
   const headers = { 'Content-Type': 'application/json', ...opts.headers };
@@ -274,20 +274,20 @@ async function apiFetch(path, opts = {}) {
   return res.json();
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Constantes
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 export const PRODUCTS_PER_PAGE = 24;
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // productService
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 export const productService = {
 
   /**
-   * Busca produtos com filtros e paginaÃ§Ã£o.
+   * Busca produtos com filtros e paginação.
    * Admin com token: pode consultar API do Render.
-   * CatÃ¡logo pÃºblico: 100% estÃ¡tico sem depender do Render.
+   * Catálogo público: 100% estático sem depender do Render.
    */
   async getProducts({
     status = 'all',
@@ -320,12 +320,12 @@ export const productService = {
         }
         return result;
       } catch (err) {
-        console.error('[productService] ERRO CRÃTICO na API do Admin:', err.message);
-        throw err; // Propaga erro, SEM fallback para estÃ¡tico
+        console.error('[productService] ERRO CRÍTICO na API do Admin:', err.message);
+        throw err; // Propaga erro, SEM fallback para estático
       }
     }
 
-    // CatÃ¡logo pÃºblico estÃ¡tico (Cloudflare Pages)
+    // Catálogo público estático (Cloudflare Pages)
 
     // 1. Busca por texto
     if (searchQuery && searchQuery.trim()) {
@@ -416,7 +416,7 @@ export const productService = {
       };
     }
 
-    // 3. CatÃ¡logo geral / PÃ¡gina inicial (produtos recentes)
+    // 3. Catálogo geral / Página inicial (produtos recentes)
     const manifest = await fetchManifest();
     let generalItems = manifest.homeRecent || [];
 
@@ -441,7 +441,7 @@ export const productService = {
   },
 
   /**
-   * Escuta atualizaÃ§Ãµes de produtos (polling seguro para admin, estÃ¡tico para pÃºblico).
+   * Escuta atualizações de produtos (polling seguro para admin, estático para público).
    */
   subscribeProducts({ status = 'all', category = null, limitCount = PRODUCTS_PER_PAGE, callback }) {
     let cancelled = false;
@@ -464,13 +464,13 @@ export const productService = {
 
     execute();
     const isAdmin = Boolean(sessionStorage.getItem('ln_sports_admin_token'));
-    // Polling apenas para admin no painel; pÃºblico nÃ£o necessita de polling agressivo
+    // Polling apenas para admin no painel; público não necessita de polling agressivo
     const interval = setTimeout(execute, isAdmin ? 5000 : 60000);
     return () => { cancelled = true; clearInterval(interval); };
   },
 
   /**
-   * ObtÃ©m um produto pelo slug usando o Ã­ndice do manifest.
+   * Obtém um produto pelo slug usando o índice do manifest.
    */
   async getProductBySlug(slug) {
     if (!slug) return null;
@@ -485,12 +485,12 @@ export const productService = {
       }
     }
 
-    // 1. Verifica se jÃ¡ estÃ¡ em memÃ³ria
+    // 1. Verifica se já está em memória
     if (productBySlugCache.has(slug)) {
       return productBySlugCache.get(slug);
     }
 
-    // 2. Consulta o manifest para descobrir em qual categoria/chunk estÃ¡ o produto
+    // 2. Consulta o manifest para descobrir em qual categoria/chunk está o produto
     const manifest = await fetchManifest();
     const mapping = manifest.slugMap ? manifest.slugMap[slug] : null;
 
@@ -513,7 +513,7 @@ export const productService = {
   },
 
   /**
-   * ObtÃ©m produtos relacionados na mesma categoria a partir do chunk jÃ¡ carregado.
+   * Obtém produtos relacionados na mesma categoria a partir do chunk já carregado.
    */
   async getRelatedProducts(currentProduct, limitCount = 4) {
     if (!currentProduct) return [];
@@ -593,65 +593,58 @@ export const productService = {
 
   /**
    * Define manualmente uma imagem existente como capa do produto (images[0]).
-   * A imagem escolhida passa para images[0], todas as outras permanecem e a ordem Ã© persistida.
+   * A imagem escolhida passa para images[0], todas as outras permanecem e a ordem é persistida.
    */
   async setProductCover(product, selectedIndex) {
-    if (
-      !product ||
-      !Array.isArray(product.images) ||
-      !Number.isInteger(selectedIndex) ||
-      selectedIndex < 0 ||
-      selectedIndex >= product.images.length
-    ) {
-      throw new Error('Índice de capa inválido');
+    if (!product || !Array.isArray(product.images) || selectedIndex < 0 || selectedIndex >= product.images.length) {
+      return product;
     }
+
+    const chosenImage = product.images[selectedIndex];
+    const otherImages = product.images.filter((_, idx) => idx !== selectedIndex);
+    const newImages = [chosenImage, ...otherImages];
+
+    // Persiste no localStorage para manter a seleção após recarregar a página
+    let adminEdits = {};
+    try {
+      const saved = localStorage.getItem('ln_sports_admin_edits');
+      if (saved) adminEdits = JSON.parse(saved);
+    } catch (e) {}
 
     const key = product.sourceUrl || product.slug;
+    adminEdits[key] = {
+      ...(adminEdits[key] || {}),
+      images: newImages,
+      mainImageIndex: 0
+    };
+    localStorage.setItem('ln_sports_admin_edits', JSON.stringify(adminEdits));
 
-    try {
-      let adminEdits = {};
-
-      try {
-        const saved = localStorage.getItem('ln_sports_admin_edits');
-        if (saved) {
-          adminEdits = JSON.parse(saved);
-        }
-      } catch (e) {
-        console.warn('[productService] Não foi possível ler edições locais:', e);
+    // Atualiza imediatamente no cache em memória
+    if (Array.isArray(liveProductsCache)) {
+      const found = liveProductsCache.find(p => (p.sourceUrl && p.sourceUrl === product.sourceUrl) || (p.slug && p.slug === product.slug));
+      if (found) {
+        found.images = newImages;
+        found.mainImageIndex = 0;
       }
-
-      adminEdits[key] = {
-        ...(adminEdits[key] || {}),
-        mainImageIndex: selectedIndex
-      };
-
-      localStorage.setItem(
-        'ln_sports_admin_edits',
-        JSON.stringify(adminEdits)
-      );
-
-      const updated = await apiFetch(
-        `/api/admin/products/${product.id}/cover`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({
-            coverIndex: selectedIndex
-          })
-        }
-      );
-
-      return {
-        ...product,
-        ...(updated || {}),
-        mainImageIndex: selectedIndex
-      };
-    } catch (err) {
-      console.error('[productService] Erro ao salvar capa:', err);
-      throw err;
     }
+
+    // Se produto possuir ID cadastrado no backend, sincroniza via API
+    if (product.id) {
+      try {
+        await apiFetch(`/api/admin/products/${product.id}/cover`, {
+          method: 'PATCH',
+          body: JSON.stringify({ images: newImages, coverIndex: selectedIndex })
+        });
+      } catch (err) {
+        // Fallback local já gravado com sucesso
+      }
+    }
+
+    return { ...product, images: newImages, mainImageIndex: 0 };
   },
+
   /**
-   * Salva Ã­ndice da imagem principal (admin).
+   * Salva índice da imagem principal (admin).
    */
   async saveMainImageIndex(productSourceUrl, productSlug, index) {
     // Guarda no localStorage para UI imediata
@@ -681,7 +674,7 @@ export const productService = {
   },
 
   /**
-   * MÃ©tricas do painel administrativo.
+   * Métricas do painel administrativo.
    */
   async getDashboardMetrics() {
     try {
@@ -704,4 +697,3 @@ export const productService = {
     }
   },
 };
-
