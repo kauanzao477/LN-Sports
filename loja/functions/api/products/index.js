@@ -7,9 +7,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'}});
 }
 
 export async function onRequestGet(context) {
@@ -74,9 +72,7 @@ export async function onRequestGet(context) {
           limit,
           total,
           totalPages: Math.ceil(total / limit),
-          hasMore: offset + limit < total,
-        ,
-      };
+          hasMore: offset + limit < total};
     });
 
     return jsonResponse(result);
