@@ -1,3 +1,4 @@
+import { getCoverImage } from '../../utils/coverUtils';
 import React, { useState, useEffect } from 'react';
 import {
   Search,
@@ -368,3 +369,4 @@ export function AdminProductsPage() {
     </div>
   );
 }
+
