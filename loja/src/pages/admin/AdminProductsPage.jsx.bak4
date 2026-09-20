@@ -73,57 +73,21 @@ export function AdminProductsPage() {
   // Define uma imagem existente como capa (images[0])
   const handleSelectCover = async (imageIndex) => {
     if (!editingProduct) return;
-
     try {
-      const updated = await productService.setProductCover(
-        editingProduct,
-        imageIndex
-      );
+      const updated = await productService.setProductCover(editingProduct, imageIndex);
+      setEditingProduct(updated);
 
-      const normalizedUpdated = {
-        ...editingProduct,
-        ...(updated || {}),
-        mainImageIndex:
-          Number.isInteger(updated?.mainImageIndex)
-            ? updated.mainImageIndex
-            : imageIndex
-      };
+      // Atualiza na lista de produtos exibida
+      setProducts(prev => prev.map(p =>
+        ((p.sourceUrl && p.sourceUrl === updated.sourceUrl) || (p.slug && p.slug === updated.slug))
+          ? { ...p, images: updated.images, mainImageIndex: 0 }
+          : p
+      ));
 
-      // Atualiza imediatamente o modal
-      setEditingProduct(normalizedUpdated);
-
-      // Atualiza imediatamente o card da lista
-      setProducts(prev =>
-        prev.map(p => {
-          const sameProduct =
-            (p.sourceUrl && p.sourceUrl === normalizedUpdated.sourceUrl) ||
-            (p.slug && p.slug === normalizedUpdated.slug) ||
-            (p.id && p.id === normalizedUpdated.id);
-
-          if (!sameProduct) return p;
-
-          return {
-            ...p,
-            ...(normalizedUpdated || {}),
-            mainImageIndex: normalizedUpdated.mainImageIndex
-          };
-        })
-      );
-
-      setFeedbackMsg(
-        `Imagem ${imageIndex + 1} definida como capa principal com sucesso!`
-      );
-
+      setFeedbackMsg(`Imagem ${imageIndex + 1} definida como capa principal (images[0]) com sucesso!`);
       setTimeout(() => setFeedbackMsg(''), 3000);
-
     } catch (err) {
-      console.error('[AdminProductsPage] Erro ao definir capa:', err);
-
-      setFeedbackMsg(
-        `Erro ao salvar capa: ${err.message || 'falha na API'}`
-      );
-
-      setTimeout(() => setFeedbackMsg(''), 5000);
+      console.error('Erro ao definir capa:', err);
     }
   };
 
@@ -312,7 +276,7 @@ export function AdminProductsPage() {
                   {editingProduct.name}
                 </h2>
                 <p className="text-xs text-brand-muted mt-1">
-                  Clique em qualquer imagem para defini-la como a nova capa. Todas as {editingProduct.images?.length || 0} fotos sÃ£o preservadas.
+                  Clique em qualquer imagem para defini-la como a nova capa (images[0]). Todas as {editingProduct.images?.length || 0} fotos sÃ£o preservadas.
                 </p>
               </div>
 
@@ -359,7 +323,7 @@ export function AdminProductsPage() {
                         {isCurrentCover ? (
                           <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-brand-purple text-white text-[10px] font-extrabold flex items-center gap-1 shadow-md">
                             <Star className="w-3 h-3 fill-current text-yellow-300" />
-                            <span>Capa Atual</span>
+                            <span>Capa Atual (images[0])</span>
                           </div>
                         ) : (
                           <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold">
@@ -405,6 +369,5 @@ export function AdminProductsPage() {
     </div>
   );
 }
-
 
 
