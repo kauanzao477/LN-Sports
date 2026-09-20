@@ -20,7 +20,7 @@ export async function onRequestPatch(context) {
 
   const id = params.id;
 
-  let body;
+  let body = {};
 
   try {
     body = await request.json();
@@ -30,20 +30,16 @@ export async function onRequestPatch(context) {
 
   const coverIndex = Number(body.coverIndex);
 
-  if (!Number.isInteger(coverIndex) || coverIndex < 0) {
-    return jsonResponse({ error: 'Índice de capa inválido' }, 400);
-  }
-
   try {
     const updated = await withDb(env, async (client) => {
-      const result = await client.query(
+      const current = await client.query(
         'SELECT images FROM products WHERE id = $1',
         [id]
       );
 
-      if (!result.rows.length) return null;
+      if (!current.rows.length) return null;
 
-      const rawImages = result.rows[0].images || [];
+      const rawImages = current.rows[0].images || [];
       const images =
         typeof rawImages === 'string'
           ? JSON.parse(rawImages)
@@ -51,42 +47,34 @@ export async function onRequestPatch(context) {
 
       if (
         !Array.isArray(images) ||
+        !Number.isInteger(coverIndex) ||
+        coverIndex < 0 ||
         coverIndex >= images.length
       ) {
         throw new Error('Índice de capa inválido');
       }
 
-      const saved = await client.query(
+      const { rows } = await client.query(
         `UPDATE products
-         SET cover_override_index = $1,
+         SET main_image_index = $1,
              updated_at = NOW()
          WHERE id = $2
          RETURNING *`,
         [coverIndex, id]
       );
 
-      if (!saved.rows.length) return null;
+      if (!rows.length) return null;
 
-      return rowToProduct(saved.rows[0]);
+      return rowToProduct(rows[0]);
     });
 
     if (!updated) {
-      return jsonResponse(
-        { error: 'Produto não encontrado' },
-        404
-      );
+      return jsonResponse({ error: 'Produto não encontrado' }, 404);
     }
 
     return jsonResponse(updated);
   } catch (err) {
-    console.error(
-      '[Pages Functions PATCH .../cover] Error:',
-      err.message
-    );
-
-    return jsonResponse(
-      { error: err.message },
-      500
-    );
+    console.error('[Pages Functions PATCH .../cover] Error:', err.message);
+    return jsonResponse({ error: err.message }, 500);
   }
 }

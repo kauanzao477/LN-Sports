@@ -150,7 +150,6 @@ let manifestCache = null;
 let categoryCache = new Map();
 let productBySlugCache = new Map();
 let searchIndexCache = null;
-let coverOverridesCache = null;
 
 export async function fetchManifest() {
   if (manifestCache) return manifestCache;
@@ -183,173 +182,59 @@ export async function fetchManifest() {
   };
 }
 
-export async function fetchCoverOverrides() {
-  if (coverOverridesCache) {
-    return coverOverridesCache;
-  }
-
-  try {
-    const res = await fetch('/api/cover-overrides');
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-
-    const rows = await res.json();
-
-    const map = {};
-
-    for (const item of Array.isArray(rows) ? rows : []) {
-      const index = Number(item.coverOverrideIndex);
-
-      if (!Number.isInteger(index) || index < 0) {
-        continue;
-      }
-
-      if (item.slug) {
-        map[`slug:${item.slug}`] = index;
-      }
-
-      if (item.sourceUrl) {
-        map[`source:${item.sourceUrl}`] = index;
-      }
-    }
-
-    coverOverridesCache = map;
-
-    return map;
-  } catch (err) {
-    console.warn(
-      '[productService] Falha ao carregar overrides de capa:',
-      err.message
-    );
-
-    coverOverridesCache = {};
-
-    return coverOverridesCache;
-  }
-}
 export async function fetchCategoryProducts(catSlug) {
   const cleanSlug = slugify(catSlug);
-  const resolvedSlug =
-    CATEGORY_SLUG_ALIASES[cleanSlug] || cleanSlug;
+  const resolvedSlug = CATEGORY_SLUG_ALIASES[cleanSlug] || cleanSlug;
 
   if (categoryCache.has(resolvedSlug)) {
     return categoryCache.get(resolvedSlug);
   }
 
   const manifest = await fetchManifest();
-
-  const catMeta = manifest.categories?.find(
-    c =>
-      c.slug === resolvedSlug ||
-      slugify(c.name) === resolvedSlug
-  );
-
-  const chunks =
-    catMeta?.chunks || [`${resolvedSlug}.json`];
-
-  const coverOverrides =
-    await fetchCoverOverrides();
+  const catMeta = manifest.categories?.find(c => c.slug === resolvedSlug || slugify(c.name) === resolvedSlug);
+  const chunks = catMeta?.chunks || [`${resolvedSlug}.json`];
 
   let adminEdits = {};
-
   try {
-    const saved =
-      localStorage.getItem('ln_sports_admin_edits');
-
-    if (saved) {
-      adminEdits = JSON.parse(saved);
-    }
+    const saved = localStorage.getItem('ln_sports_admin_edits');
+    if (saved) adminEdits = JSON.parse(saved);
   } catch (e) {}
 
   const combinedItems = [];
-
   for (const chunk of chunks) {
     try {
-      const res = await fetch(
-        `${import.meta.env.BASE_URL}data/catalog/${chunk}`
-      );
-
-      if (!res.ok) continue;
-
-      const items = await res.json();
-
-      if (!Array.isArray(items)) continue;
-
-      for (let i = 0; i < items.length; i++) {
-        const raw = items[i];
-
-        const localOverride =
-          adminEdits[raw.sourceUrl] ||
-          adminEdits[raw.slug] ||
-          {};
-
-        const serverIndex =
-          coverOverrides[`slug:${raw.slug}`] ??
-          coverOverrides[`source:${raw.sourceUrl || ''}`];
-
-        const product = {
-          id: raw.slug || raw.id || String(i),
-          ...raw,
-          ...localOverride,
-          published: raw.published !== false,
-          status: raw.status || 'published'
-        };
-
-        const rawIndex =
-          raw.mainImageIndex !== undefined &&
-          raw.mainImageIndex !== null
-            ? Number(raw.mainImageIndex)
-            : null;
-
-        const effectiveIndex =
-          Number.isInteger(serverIndex)
-            ? serverIndex
-            : (
-                Number.isInteger(localOverride.mainImageIndex)
-                  ? Number(localOverride.mainImageIndex)
-                  : (
-                      Number.isInteger(rawIndex)
-                        ? rawIndex
-                        : 0
-                    )
-              );
-
-        product.mainImageIndex =
-          Number.isInteger(effectiveIndex) &&
-          effectiveIndex >= 0 &&
-          effectiveIndex < product.images.length
-            ? effectiveIndex
-            : 0;
-
-        product.coverOverrideIndex =
-          Number.isInteger(serverIndex)
-            ? serverIndex
-            : null;
-
-        combinedItems.push(product);
-
-        if (product.slug) {
-          productBySlugCache.set(
-            product.slug,
-            product
-          );
+      const res = await fetch(`${import.meta.env.BASE_URL}data/catalog/${chunk}`);
+      if (res.ok) {
+        const items = await res.json();
+        if (Array.isArray(items)) {
+          for (let i = 0; i < items.length; i++) {
+            const raw = items[i];
+            const override = adminEdits[raw.sourceUrl] || adminEdits[raw.slug] || {};
+            const product = {
+              id: raw.slug || raw.id || String(i),
+              ...raw,
+              ...override,
+              published: raw.published !== false,
+              status: raw.status || 'published'
+            };
+            const adminIdx = override.mainImageIndex;
+            product.mainImageIndex = resolveCoverIndex(
+              product,
+              Number.isInteger(adminIdx) ? adminIdx : null
+            );
+            combinedItems.push(product);
+            if (product.slug) {
+              productBySlugCache.set(product.slug, product);
+            }
+          }
         }
       }
     } catch (e) {
-      console.warn(
-        `[productService] Falha ao carregar chunk ${chunk}:`,
-        e.message
-      );
+      console.warn(`[productService] Falha ao carregar chunk ${chunk}:`, e.message);
     }
   }
 
-  categoryCache.set(
-    resolvedSlug,
-    combinedItems
-  );
-
+  categoryCache.set(resolvedSlug, combinedItems);
   return combinedItems;
 }
 
@@ -430,54 +315,9 @@ export const productService = {
         if (sortBy) params.set('sort', sortBy === 'newest' ? 'newest' : sortBy);
 
         const result = await apiFetch(`/api/products?${params.toString()}`);
-
         if (result?.data) {
-          const enriched = [];
-
-          for (const p of result.data) {
-            let canonical = null;
-
-            try {
-              const manifest = await fetchManifest();
-              const mapping = manifest.slugMap?.[p.slug];
-
-              if (mapping?.categorySlug) {
-                const items = await fetchCategoryProducts(
-                  mapping.categorySlug
-                );
-
-                canonical =
-                  items.find(
-                    item => item.slug === p.slug
-                  ) || null;
-              }
-            } catch (e) {
-              console.warn(
-                '[productService] Falha ao resolver capa canônica:',
-                p.slug,
-                e.message
-              );
-            }
-
-            const overrideIndex =
-              Number.isInteger(p.coverOverrideIndex)
-                ? p.coverOverrideIndex
-                : null;
-
-            enriched.push({
-              ...p,
-              category: inferCategory(p),
-              mainImageIndex:
-                overrideIndex ??
-                canonical?.mainImageIndex ??
-                p.mainImageIndex ??
-                0
-            });
-          }
-
-          result.data = enriched;
+          result.data = result.data.map(p => ({ ...p, category: inferCategory(p) }));
         }
-
         return result;
       } catch (err) {
         console.error('[productService] ERRO CRÃTICO na API do Admin:', err.message);
@@ -647,27 +487,7 @@ export const productService = {
 
     // 1. Verifica se jÃ¡ estÃ¡ em memÃ³ria
     if (productBySlugCache.has(slug)) {
-      const cached = productBySlugCache.get(slug);
-      const overrides = await fetchCoverOverrides();
-
-      const serverIndex =
-        overrides[`slug:${cached.slug}`] ??
-        overrides[`source:${cached.sourceUrl || ''}`];
-
-      if (
-        Number.isInteger(serverIndex) &&
-        Array.isArray(cached.images) &&
-        serverIndex >= 0 &&
-        serverIndex < cached.images.length
-      ) {
-        return {
-          ...cached,
-          mainImageIndex: serverIndex,
-          coverOverrideIndex: serverIndex
-        };
-      }
-
-      return cached;
+      return productBySlugCache.get(slug);
     }
 
     // 2. Consulta o manifest para descobrir em qual categoria/chunk estÃ¡ o produto
@@ -685,25 +505,8 @@ export const productService = {
     const fallbackList = [...(manifest.homeFeatured || []), ...(manifest.homeRecent || [])];
     const foundFallback = fallbackList.find(p => p.slug === slug);
     if (foundFallback) {
-      const overrides = await fetchCoverOverrides();
-
-      const serverIndex =
-        overrides[`slug:${foundFallback.slug}`] ??
-        overrides[`source:${foundFallback.sourceUrl || ''}`];
-
-      const result = {
-        ...foundFallback,
-        ...(Number.isInteger(serverIndex)
-          ? {
-              mainImageIndex: serverIndex,
-              coverOverrideIndex: serverIndex
-            }
-          : {})
-      };
-
-      productBySlugCache.set(slug, result);
-
-      return result;
+      productBySlugCache.set(slug, foundFallback);
+      return foundFallback;
     }
 
     return null;
@@ -901,5 +704,4 @@ export const productService = {
     }
   },
 };
-
 
